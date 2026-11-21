@@ -1,3 +1,6 @@
+import pytest
+from fastapi import HTTPException
+
 import iskander_trade.api as api_module
 
 
@@ -29,11 +32,8 @@ def test_paper_cycle_is_manual_and_closes_market_client(monkeypatch):
 def test_paper_cycle_rejects_concurrent_execution(monkeypatch):
     assert api_module.cycle_lock.acquire(blocking=False)
     try:
-        try:
+        with pytest.raises(HTTPException) as exc_info:
             api_module.run_paper_cycle()
-        except Exception as exc:
-            assert getattr(exc, "status_code", None) == 409
-        else:
-            raise AssertionError("Concurrent cycle should be rejected")
+        assert exc_info.value.status_code == 409
     finally:
         api_module.cycle_lock.release()
