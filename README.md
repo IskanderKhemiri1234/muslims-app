@@ -48,11 +48,11 @@ ruff check src tests
 
 The Android client asks for the deployed HTTPS dashboard URL, then opens the dashboard in a WebView. It does not contain exchange credentials. The workflow `.github/workflows/android-apk.yml` builds a debug APK and uploads it as the `iskander-ai-trade-debug-apk` Actions artifact. This is a debug-signed installable build, not a Play Store release or a separately managed production signing key.
 
-## Render deployment
+## Render free deployment
 
-`render.yaml` describes a single always-on web service, persistent state disk, generated dashboard token, and the combined API/paper-worker process. It uses a paid `starter` compute instance and a persistent disk. It has **not** been deployed automatically.
+`render.yaml` is configured for a single **free** Render web service, with no paid disk, worker, or database. The API does not run a background trading loop: the operator explicitly requests one paper cycle from the dashboard. The service sleeps after 15 minutes without inbound traffic and may restart at any time.
 
-Render's free web instances sleep after inactivity and have ephemeral filesystems; they cannot attach persistent disks. A continuous worker with durable local state therefore cannot meet the always-on requirement on the free web tier. Review the current [Render free-instance limits](https://render.com/docs/free) and [pricing](https://render.com/pricing) before applying the Blueprint.
+**Important free-tier limitations:** the service filesystem is ephemeral, so paper positions and trade history can be lost after sleep, restart, or redeploy. The free Render Postgres option is not a durable solution because it expires after 30 days and has no backups. This deployment is for evaluation and dashboard access only; it is not an always-on bot and must not be relied on to monitor markets continuously. Review [Render free-instance limits](https://render.com/docs/free).
 
 ## Known limitations
 
