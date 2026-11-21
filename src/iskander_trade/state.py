@@ -23,7 +23,7 @@ def load_state(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as handle:
         data = json.load(handle)
     if not isinstance(data, dict) or not isinstance(data.get("positions"), dict):
-        raise ValueError("Paper state file has an invalid structure; refusing to overwrite it.")
+        raise TypeError("Paper state file has an invalid structure; refusing to overwrite it.")
     for key, value in empty_state().items():
         data.setdefault(key, value)
     return data
