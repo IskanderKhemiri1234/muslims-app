@@ -25,7 +25,8 @@ Position notional is bounded by the risk budget divided by the stop distance, th
 - Stop execution assumes a simple ticker-price fill and does not model gaps or liquidity.
 - The EMA crossover is a transparent technical baseline, not a validated strategy.
 - ML evaluation is preliminary and lacks cost-aware backtesting, walk-forward testing, and an untouched holdout.
-- Paper state is local JSON for one process and one instance, not transactional multi-instance storage.
+- Paper state is local JSON on an ephemeral free-host filesystem; it may be lost on sleep, restart, or redeploy. It is not suitable for unattended trading or durable portfolio accounting.
+- The free-host API runs paper cycles only when the operator explicitly requests them; it does not run continuously while the service is asleep.
 - Daily accounting uses the host machine's calendar date.
 - The Render Blueprint uses paid always-on compute and a persistent disk; the free web tier is unsuitable for a continuous worker and durable local state.
 
