@@ -10,10 +10,10 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+import ccxt
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-import ccxt
 
 from .config import Settings
 from .engine import PaperTradingEngine
