@@ -1,8 +1,12 @@
-"""Read-only FastAPI service for the paper-trading dashboard."""
+"""Paper-only FastAPI service, dashboard, and offline ML evaluation."""
 from __future__ import annotations
 
 import hmac
+import logging
 import os
+import threading
+from contextlib import asynccontextmanager
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -11,12 +15,50 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import Settings
+from .engine import PaperTradingEngine
 from .market_data import BinanceMarketData
+from .ml import train_research_model
 from .state import load_state
 
+log = logging.getLogger(__name__)
 settings = Settings()
-app = FastAPI(title="Iskander AI Trade API", version="0.2.0")
+stop_event = threading.Event()
+worker_thread: threading.Thread | None = None
 dashboard_dir = Path(__file__).resolve().parents[2] / "dashboard"
+
+
+def paper_worker() -> None:
+    market_data = BinanceMarketData()
+    try:
+        engine = PaperTradingEngine(settings, market_data, load_state(settings.state_path))
+        log.warning("Paper worker started; live execution is not implemented.")
+        while not stop_event.is_set():
+            try:
+                engine.run_cycle()
+            except Exception:
+                log.exception("Paper worker cycle failed.")
+            stop_event.wait(settings.poll_seconds)
+    finally:
+        market_data.close()
+        log.info("Paper worker stopped.")
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    global worker_thread
+    settings.validate()
+    stop_event.clear()
+    worker_thread = threading.Thread(target=paper_worker, name="paper-engine", daemon=True)
+    worker_thread.start()
+    try:
+        yield
+    finally:
+        stop_event.set()
+        if worker_thread is not None:
+            worker_thread.join(timeout=25)
+
+
+app = FastAPI(title="Iskander AI Trade API", version="0.3.0", lifespan=lifespan)
 if dashboard_dir.exists():
     app.mount("/assets", StaticFiles(directory=dashboard_dir), name="assets")
 
@@ -69,5 +111,25 @@ def markets() -> dict[str, Any]:
             except Exception as exc:
                 rows.append({"symbol": symbol, "error": str(exc)})
         return {"markets": rows}
+    finally:
+        client.close()
+
+
+@app.get("/api/v1/ml/evaluate", dependencies=[Depends(require_dashboard_token)])
+def evaluate_ml() -> dict[str, Any]:
+    """Run chronological offline evaluation; output is informational, never a trade signal."""
+    client = BinanceMarketData()
+    reports: list[dict[str, Any]] = []
+    try:
+        for symbol in settings.watchlist:
+            try:
+                candles = client.fetch_candles(symbol, settings.timeframe, settings.candle_limit)
+                closed_closes = [float(row[4]) for row in candles[:-1]]
+                report = asdict(train_research_model(closed_closes))
+                reports.append({"symbol": symbol, **report,
+                                "assessment": "above_baseline" if report["accuracy"] > report["baseline_accuracy"] else "not_above_baseline"})
+            except Exception as exc:
+                reports.append({"symbol": symbol, "error": str(exc)})
+        return {"method": "RandomForest + TimeSeriesSplit", "purpose": "offline research only", "reports": reports}
     finally:
         client.close()
