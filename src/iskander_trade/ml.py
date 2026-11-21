@@ -1,8 +1,8 @@
 """Offline ML research utilities; models never place or authorize trades."""
 from __future__ import annotations
 
-from dataclasses import dataclass
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
