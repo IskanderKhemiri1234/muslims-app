@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: iskander-ai-trade
+    runtime: python
+    plan: starter
+    buildCommand: pip install -e .
+    startCommand: uvicorn iskander_trade.api:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: MODE
+        value: paper
+      - key: DASHBOARD_TOKEN
+        generateValue: true
+      - key: STATE_PATH
+        value: /var/data/paper_state.json
+    disk:
+      name: iskander-trade-state
+      mountPath: /var/data
+      sizeGB: 1
