@@ -66,7 +66,7 @@ class MainActivity : Activity() {
 
     private fun openDashboard(baseUrl: String) {
         val web = WebView(this).apply {
-            setBackgroundColor(background)
+            setBackgroundColor(bgColor)
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = false
             webViewClient = object : WebViewClient() {
