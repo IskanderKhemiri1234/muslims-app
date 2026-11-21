@@ -12,7 +12,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 
 class MainActivity : Activity() {
-    private val background = Color.rgb(7, 28, 23)
+    private val bgColor = Color.rgb(7, 28, 23)
     private val gold = Color.rgb(216, 182, 106)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -25,7 +25,7 @@ class MainActivity : Activity() {
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(36, 72, 36, 36)
-            setBackgroundColor(background)
+            setBackgroundColor(bgColor)
             gravity = Gravity.CENTER_VERTICAL
         }
         val title = TextView(this).apply {
