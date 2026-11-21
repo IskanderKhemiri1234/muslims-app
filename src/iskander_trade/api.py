@@ -36,7 +36,7 @@ def paper_worker() -> None:
         while not stop_event.is_set():
             try:
                 engine.run_cycle()
-            except Exception:
+            except Exception:  # noqa: BLE001 - keep the long-running paper worker alive
                 log.exception("Paper worker cycle failed.")
             stop_event.wait(settings.poll_seconds)
     finally:
@@ -129,7 +129,7 @@ def evaluate_ml() -> dict[str, Any]:
                 report = asdict(train_research_model(closed_closes))
                 reports.append({"symbol": symbol, **report,
                                 "assessment": "above_baseline" if report["accuracy"] > report["baseline_accuracy"] else "not_above_baseline"})
-            except Exception as exc:
+            except (ccxt.BaseError, ValueError) as exc:
                 reports.append({"symbol": symbol, "error": str(exc)})
         return {"method": "RandomForest + TimeSeriesSplit", "purpose": "offline research only", "reports": reports}
     finally:
