@@ -1,59 +1,61 @@
 # Iskander AI Trade
 
-A modular cryptocurrency trading research project, separated from the Muslims-app Flutter application. The first implementation is a multi-symbol Binance Spot market scanner with a transparent EMA baseline and a local paper-trading engine.
+A standalone multi-symbol Binance Spot research and paper-trading application. It is separate from the Muslims-app Flutter project.
 
-> **Safety boundary:** this build is paper-only. It cannot submit real exchange orders, does not request API keys, and rejects any mode other than `paper`. It is not a production-ready or profitable trading system.
+> **Safety boundary:** paper mode only. No exchange account keys are read, no authenticated exchange endpoint is used, and no real order can be submitted. The ML module is research-only and does not authorize trades. This is not a production-validated or profitable trading system.
 
-## Current foundation
+## Current implementation
 
-- Scans a configurable list of USDT spot markets (six example symbols by default).
-- Uses closed-candle EMA crossover signals (20/50 by default, 15m timeframe).
-- Sizes simulated positions from a 0.35 USDT risk budget and 2% stop reference.
-- Uses 70 USDT virtual capital, a 1.40 USDT daily realized-loss limit, up to three concurrent positions, and a 20 USDT per-position notional cap.
-- Persists simulated positions and trade history to local JSON.
-- Includes unit tests and a GitHub Actions test/lint workflow.
+- Configurable multi-symbol USDT Spot watchlist; six symbols are configured by default.
+- 15m closed-candle EMA crossover baseline (20/50 defaults).
+- Paper engine with a 70 USDT virtual balance, 0.35 USDT planned risk budget, 1.40 USDT daily realized-loss guard, three-position cap, and 20 USDT position-notional cap.
+- Atomic local JSON state persistence.
+- FastAPI dashboard/API with token-protected status and market routes.
+- Dashboard includes paper portfolio, market watch, recent trades, and an offline ML evaluation panel.
+- Offline Random Forest research with chronological TimeSeriesSplit validation and a majority-class baseline.
+- Android WebView client and GitHub Actions workflow that builds an installable debug APK.
+- Pytest and Ruff CI.
 
-The strategy is currently deterministic technical analysis, **not a trained AI/ML model**. The project name is the product identity; genuine ML research, historical validation, and strategy evaluation are later milestones.
+The ML report is a diagnostic metric only. It is not a reliable prediction, does not model trading costs, and is not connected to the order engine.
 
-## Repository layout
+## Local setup
 
-```text
-src/iskander_trade/
-  config.py       validated configuration; paper-only mode guard
-  market_data.py  public Binance Spot OHLCV/ticker adapter
-  indicators.py   EMA calculation
-  strategy.py     closed-candle EMA crossover signal
-  risk.py         risk-based position sizing and daily-loss guard
-  state.py        atomic local paper-state persistence
-  engine.py       multi-symbol paper execution loop
-  main.py         command-line process entry point
-tests/            deterministic unit tests
-docs/             safety policy and development roadmap
-```
-
-## Run locally
-
-Python 3.11 or newer is required.
+Python 3.11+:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 cp .env.example .env
-pytest -q
-iskander-trade
 ```
 
-On Windows, activate the environment with `.venv\\Scripts\\activate`.
+Set a long random `DASHBOARD_TOKEN` in `.env`, then run the API and paper worker together:
 
-The process needs public network access to read Binance market data. No account connection is required. Stop it with Ctrl+C.
+```bash
+uvicorn iskander_trade.api:app --host 0.0.0.0 --port 8000
+```
 
-## Configuration
+Open `http://localhost:8000`, enter the dashboard token, and connect. The protected API is under `/api/v1`; `/health` is public. To run only the CLI worker instead, use `iskander-trade`.
 
-Edit `.env` to change the watchlist, timeframe, virtual capital, risk budget, daily-loss limit, and strategy periods. Keep `MODE=paper`. The program intentionally refuses `testnet` and `live` until a separate execution adapter and safety review exist.
+Run checks:
 
-## Important limitations
+```bash
+pytest -q
+ruff check src tests
+```
 
-The current paper simulator does not yet model exchange fees, spread, slippage, partial fills, minimum order sizes, or exchange precision. It is not a validated backtester and does not establish a trading edge. See [docs/SAFETY.md](docs/SAFETY.md) and [docs/ROADMAP.md](docs/ROADMAP.md).
+## Android APK
 
-No trading system can guarantee profit. Do not connect real funds based on paper results.
+The Android client asks for the deployed HTTPS dashboard URL, then opens the dashboard in a WebView. It does not contain exchange credentials. The workflow `.github/workflows/android-apk.yml` builds a debug APK and uploads it as the `iskander-ai-trade-debug-apk` Actions artifact. This is a debug-signed installable build, not a Play Store release or a separately managed production signing key.
+
+## Render deployment
+
+`render.yaml` describes a single always-on web service, persistent state disk, generated dashboard token, and the combined API/paper-worker process. It uses a paid `starter` compute instance and a persistent disk. It has **not** been deployed automatically.
+
+Render's free web instances sleep after inactivity and have ephemeral filesystems; they cannot attach persistent disks. A continuous worker with durable local state therefore cannot meet the always-on requirement on the free web tier. Review the current [Render free-instance limits](https://render.com/docs/free) and [pricing](https://render.com/pricing) before applying the Blueprint.
+
+## Known limitations
+
+The simulator still needs explicit fee, spread, slippage, partial-fill, exchange-precision, minimum-notional, and gap-risk modeling. The ML dataset and validation are preliminary; no historical backtest, walk-forward study, untouched holdout report, or profitability evidence is available. Local JSON is single-instance storage, not a multi-replica database.
+
+No trading system can guarantee profit. Do not connect real funds based on paper or ML research results.
