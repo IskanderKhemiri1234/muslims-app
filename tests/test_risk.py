@@ -2,12 +2,12 @@ from iskander_trade.risk import size_position
 
 
 def _size(**overrides):
-    values = dict(
-        price=100.0, capital_usdt=70.0, risk_per_trade_usdt=0.35,
-        stop_loss_pct=2.0, max_position_notional_usdt=20.0,
-        open_positions=0, max_open_positions=3, daily_pnl_usdt=0.0,
-        max_daily_loss_usdt=1.4, current_exposure_usdt=0.0,
-    )
+    values = {
+        "price": 100.0, "capital_usdt": 70.0, "risk_per_trade_usdt": 0.35,
+        "stop_loss_pct": 2.0, "max_position_notional_usdt": 20.0,
+        "open_positions": 0, "max_open_positions": 3, "daily_pnl_usdt": 0.0,
+        "max_daily_loss_usdt": 1.4, "current_exposure_usdt": 0.0,
+    }
     values.update(overrides)
     return size_position(**values)
 
