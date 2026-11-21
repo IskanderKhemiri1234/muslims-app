@@ -36,7 +36,7 @@ def paper_worker() -> None:
         while not stop_event.is_set():
             try:
                 engine.run_cycle()
-            except Exception:  # noqa: BLE001 - keep the long-running paper worker alive
+            except Exception:
                 log.exception("Paper worker cycle failed.")
             stop_event.wait(settings.poll_seconds)
     finally:
