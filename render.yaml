@@ -1,8 +1,8 @@
 services:
   - type: web
-    name: iskander-ai-trade
+    name: iskander-ai-trade-free
     runtime: python
-    plan: starter
+    plan: free
     buildCommand: pip install -e .
     startCommand: uvicorn iskander_trade.api:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
@@ -14,8 +14,22 @@ services:
       - key: DASHBOARD_TOKEN
         generateValue: true
       - key: STATE_PATH
-        value: /var/data/paper_state.json
-    disk:
-      name: iskander-trade-state
-      mountPath: /var/data
-      sizeGB: 1
+        value: /tmp/iskander_trade/paper_state.json
+      - key: WATCHLIST
+        value: BTC/USDT,ETH/USDT,BNB/USDT,SOL/USDT,XRP/USDT,ADA/USDT
+      - key: TIMEFRAME
+        value: 15m
+      - key: VIRTUAL_CAPITAL_USDT
+        value: "70"
+      - key: RISK_PER_TRADE_USDT
+        value: "0.35"
+      - key: MAX_DAILY_LOSS_USDT
+        value: "1.40"
+      - key: MAX_OPEN_POSITIONS
+        value: "3"
+      - key: MAX_POSITION_NOTIONAL_USDT
+        value: "20"
+      - key: STOP_LOSS_PCT
+        value: "2.0"
+      - key: TAKE_PROFIT_PCT
+        value: "4.0"
