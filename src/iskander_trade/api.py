@@ -13,6 +13,7 @@ from typing import Any
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+import ccxt
 
 from .config import Settings
 from .engine import PaperTradingEngine
@@ -108,7 +109,7 @@ def markets() -> dict[str, Any]:
         for symbol in settings.watchlist:
             try:
                 rows.append({"symbol": symbol, "price": client.fetch_last_price(symbol)})
-            except Exception as exc:
+            except ccxt.BaseError as exc:
                 rows.append({"symbol": symbol, "error": str(exc)})
         return {"markets": rows}
     finally:
