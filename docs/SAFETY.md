@@ -2,9 +2,9 @@
 
 ## Current release boundary
 
-This repository currently implements public Binance market-data access and simulated paper positions only. The application deliberately rejects every mode other than `paper`. It does not load API keys, sign requests, or submit exchange orders.
+The application uses public Binance Spot market data and a paper-only simulator. Configuration validation rejects every mode other than `paper`. The API does not provide order-submission routes. No API key is requested or stored, and no real exchange order can be submitted.
 
-Do not interpret a paper-trading result as evidence of profitability or as authorization to trade real funds.
+The dashboard's Random Forest model is an offline research utility. Its metrics are not trade recommendations, predictions of guaranteed outcomes, or authorization for the strategy engine to act.
 
 ## Risk defaults
 
@@ -15,19 +15,20 @@ Do not interpret a paper-trading result as evidence of profitability or as autho
 - Maximum daily realized loss: 1.40 USDT.
 - Maximum concurrent paper positions: 3.
 - Maximum notional per position: 20 USDT.
-- Spot symbols quoted in USDT; no margin, futures, or leverage.
+- USDT-quoted Spot markets only; no margin, futures, or leverage.
 
-Position notional is bounded by the risk budget divided by the stop distance, the per-position notional cap, and remaining virtual capital.
+Position notional is bounded by the risk budget divided by the stop distance, the per-position notional cap, and remaining virtual capital. These controls do not guarantee the simulated loss will remain within the planned budget.
 
-## Known limitations before any live-trading discussion
+## Known limitations
 
 - Fees, spread, slippage, partial fills, exchange filters, and minimum-notional rules are not yet modeled.
-- The baseline EMA crossover is a transparent technical rule, not machine learning or an AI prediction.
-- There is no validated backtest, walk-forward evaluation, or out-of-sample report yet.
-- Paper positions are local simulations and do not represent exchange balances or actual fills.
-- Daily accounting currently uses the host machine's calendar date.
-- The initial state file is local JSON and is not suitable for multi-instance production deployment.
+- Stop execution assumes a simple ticker-price fill and does not model gaps or liquidity.
+- The EMA crossover is a transparent technical baseline, not a validated strategy.
+- ML evaluation is preliminary and lacks cost-aware backtesting, walk-forward testing, and an untouched holdout.
+- Paper state is local JSON for one process and one instance, not transactional multi-instance storage.
+- Daily accounting uses the host machine's calendar date.
+- The Render Blueprint uses paid always-on compute and a persistent disk; the free web tier is unsuitable for a continuous worker and durable local state.
 
 ## Release gates
 
-A future execution adapter must remain a separate module and must not be enabled by changing an environment variable alone. Before considering any real-money integration, require independent code review, exchange testnet integration, deterministic tests for order lifecycle and recovery, fee/slippage modeling, durable transactional storage, monitoring/alerts, explicit user-controlled enablement, and a documented rollback procedure.
+Any future execution adapter must remain separate and must not be enabled by an environment variable alone. Before considering real-money integration, require independent code review, exchange testnet integration, deterministic order-lifecycle and recovery tests, fee/slippage modeling, durable transactional storage, monitoring and alerts, explicit user-controlled enablement, and a documented rollback procedure.
