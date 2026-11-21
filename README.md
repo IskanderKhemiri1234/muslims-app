@@ -52,7 +52,7 @@ The Android client asks for the deployed HTTPS dashboard URL, then opens the das
 
 `render.yaml` is configured for a single **free** Render web service, with no paid disk, worker, or database. The API does not run a background trading loop: the operator explicitly requests one paper cycle from the dashboard. The service sleeps after 15 minutes without inbound traffic and may restart at any time.
 
-**Important free-tier limitations:** the service filesystem is ephemeral, so paper positions and trade history can be lost after sleep, restart, or redeploy. The free Render Postgres option is not a durable solution because it expires after 30 days and has no backups. This deployment is for evaluation and dashboard access only; it is not an always-on bot and must not be relied on to monitor markets continuously. Review [Render free-instance limits](https://render.com/docs/free).
+**Important free-tier limitations:** the service filesystem is ephemeral, so paper positions and trade history can be lost after sleep, restart, or redeploy. The free Render Postgres option is not a durable solution because it expires after 30 days and has no backups. This deployment is for evaluation and dashboard access only; it is not an always-on bot and must not be relied on to monitor markets continuously. The Blueprint was prepared, but Render rejected service creation in this workspace with HTTP 402 because payment information is required; no Render service has been created. No paid resource was provisioned. Review [Render free-instance limits](https://render.com/docs/free).
 
 ## Known limitations
 
