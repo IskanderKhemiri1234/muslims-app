@@ -7,7 +7,6 @@ from collections import defaultdict
 from pathlib import Path
 
 import ccxt
-
 import regime_filter_research_engine as engine
 
 FREEZE_SPEC = {
@@ -107,7 +106,6 @@ def run() -> dict:
         }
 
     prepared = engine.indicators(data)
-    btc = data["BTC/USDT"]["4h"]
     last_ts = min(int(data[s]["4h"][-1][0]) for s in engine.SYMBOLS)
     holdout_start = last_ts - 90 * engine.ONE_DAY
     wf_start = since + 220 * engine.ONE_DAY
