@@ -4,6 +4,10 @@ import importlib.util
 from pathlib import Path
 
 import pytest
+import sys
+import types
+
+sys.modules.setdefault("ccxt", types.ModuleType("ccxt"))
 
 ENGINE_PATH = Path(__file__).resolve().parents[1] / "scripts" / "regime_filter_research_engine.py"
 SPEC = importlib.util.spec_from_file_location("regime_filter_engine_test", ENGINE_PATH)
@@ -30,7 +34,7 @@ def _synthetic_data():
         elif i == 60:
             eth_4h.append([ts, 100, 121, 99, 120, 100])
         else:
-            eth_4h.append([ts, 120, 121, 113, 120, 100])
+            eth_4h.append([ts, 120, 121, 100, 120, 100])
     return {
         "BTC/USDT": {"4h": btc_4h, "1d": btc_daily},
         "ETH/USDT": {"4h": eth_4h, "1d": eth_daily},
