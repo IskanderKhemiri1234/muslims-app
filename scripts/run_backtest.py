@@ -69,11 +69,12 @@ def _fetch_history(
     end_exclusive_ms: int,
     cache_dir: Path,
     *,
+    provider: str,
     offline: bool,
     refresh: bool,
 ) -> list[list[float]]:
     safe_symbol = symbol.replace("/", "_")
-    path = cache_dir / f"{safe_symbol}_{timeframe}.csv"
+    path = cache_dir / f"{provider}_{safe_symbol}_{timeframe}.csv"
     if path.exists() and not refresh:
         cached = _read_csv(path)
         if cached and int(cached[0][0]) <= since_ms and int(cached[-1][0]) >= (
@@ -87,9 +88,10 @@ def _fetch_history(
 
     rows: dict[int, list[float]] = {}
     cursor = since_ms
+    page_limit = 300 if provider == "okx" else 1000
     while cursor < end_exclusive_ms:
         batch = exchange.fetch_ohlcv(
-            symbol, timeframe=timeframe, since=cursor, limit=1000
+            symbol, timeframe=timeframe, since=cursor, limit=page_limit
         )
         if not batch:
             break
@@ -101,7 +103,7 @@ def _fetch_history(
         if next_cursor <= cursor:
             raise RuntimeError(f"Exchange pagination did not advance for {symbol} {timeframe}")
         cursor = next_cursor
-        if len(batch) < 1000:
+        if len(batch) < page_limit:
             break
 
     result = [rows[key] for key in sorted(rows)]
@@ -174,7 +176,8 @@ def main() -> None:
             end_exclusive = (now_ms // duration) * duration
             rows = _fetch_history(
                 exchange, symbol, timeframe, since_ms, end_exclusive,
-                args.cache_dir, offline=args.offline, refresh=args.refresh,
+                args.cache_dir, provider=args.exchange,
+                offline=args.offline, refresh=args.refresh,
             )
             datasets[symbol][timeframe] = rows
             print(f"Loaded {symbol} {timeframe}: {len(rows):,} candles")
