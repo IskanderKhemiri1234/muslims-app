@@ -170,7 +170,7 @@ def main() -> None:
     symbols = tuple(item.strip() for item in args.symbols.split(",") if item.strip())
     for symbol in symbols:
         if exchange is not None and symbol not in exchange.markets:
-            raise SystemExit(f"Binance Spot market is unavailable: {symbol}")
+            raise SystemExit(f"{args.exchange} Spot market is unavailable: {symbol}")
         datasets[symbol] = {}
         for timeframe, duration in TIMEFRAMES.items():
             end_exclusive = (now_ms // duration) * duration
