@@ -13,15 +13,13 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import sys
-from datetime import datetime, timezone
+import math
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
-
-from iskander_trade.backtest import BacktestConfig, compare_strategies  # noqa: E402
+from iskander_trade.backtest import BacktestConfig, compare_strategies
 
 
 DEFAULT_SYMBOLS = (
@@ -115,7 +113,7 @@ def _fetch_history(
 
 
 def _iso(timestamp_ms: int) -> str:
-    return datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc).isoformat()
+    return datetime.fromtimestamp(timestamp_ms / 1000, tz=UTC).isoformat()
 
 
 def _summarize_fold_results(folds: list[dict[str, Any]], key: str) -> dict[str, Any]:
@@ -146,12 +144,12 @@ def _summarize_fold_results(folds: list[dict[str, Any]], key: str) -> dict[str, 
 
 def main() -> None:
     args = _parse_args()
-    since = datetime.strptime(args.since, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    since = datetime.strptime(args.since, "%Y-%m-%d").replace(tzinfo=UTC)
     since_ms = int(since.timestamp() * 1000)
     if min(args.holdout_days, args.walk_forward_days, args.warmup_days) <= 0:
         raise SystemExit("Validation window lengths must be positive.")
 
-    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    now_ms = int(datetime.now(UTC).timestamp() * 1000)
     datasets: dict[str, dict[str, list[list[float]]]] = {}
     if not args.offline:
         try:
