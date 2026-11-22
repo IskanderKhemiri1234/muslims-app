@@ -1,10 +1,8 @@
 """Downloader/parser for Binance's official public data.vision SPOT kline archives."""
 from __future__ import annotations
 
-import calendar
 import csv
 import io
-import time
 import urllib.error
 import urllib.request
 import zipfile
