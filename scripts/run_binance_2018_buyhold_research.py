@@ -256,7 +256,7 @@ def run() -> dict:
         raise ArchiveUnavailable("Binance Vision latest completed 4h candle is over 48 hours stale")
     evaluation_end = last_ts + engine.FOUR_HOURS
     holdout_start = evaluation_end - HOLDOUT_DAYS * engine.ONE_DAY
-    wf_start = START_MS + 200 * engine.ONE_DAY
+    wf_start = START_MS
     if holdout_start <= wf_start:
         raise ArchiveUnavailable("Insufficient Binance history for a 90-day Holdout after warm-up")
     scenarios = {}
@@ -407,7 +407,13 @@ def run() -> dict:
             "donchian": "unchanged: per-asset daily close>SMA200; 55 completed 4h-bar breakout; exit below prior 20 completed 4h-bar low or asset regime failure; initial stop 3x ATR(14)",
             "momentum": "unchanged: rank eligible assets by trailing 90-day return (540 consecutive 4h bars); hold top two; daily rebalance; initial stop 3x ATR(14)",
             "portfolio_limits": {"max_positions": engine.MAX_POSITIONS, "max_notional_per_position_usdt": engine.MAX_NOTIONAL},
-            "walk_forward": {"fold_days": FOLD_DAYS, "continuous_portfolio": True, "equity_and_positions_carry": True},
+            "walk_forward": {
+                "start_utc": datetime.fromtimestamp(wf_start / 1000, UTC).isoformat(),
+                "fold_days": FOLD_DAYS,
+                "continuous_portfolio": True,
+                "equity_and_positions_carry": True,
+                "warmup_policy": "The evaluation period begins 2018-01-01; each asset remains ineligible until its frozen 200-day SMA and strategy lookbacks are available from its actual first candles. The evaluation start is not shifted forward to hide warm-up time.",
+            },
             "holdout": {"days": HOLDOUT_DAYS, "final_period": True, "reset": False},
         },
         "benchmarks": {
