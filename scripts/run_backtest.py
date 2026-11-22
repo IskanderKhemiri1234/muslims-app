@@ -61,6 +61,33 @@ def _write_csv(path: Path, rows: list[list[float]]) -> None:
         writer.writerows(rows)
 
 
+def _aggregate_15m_to_1h(rows: list[list[float]]) -> list[list[float]]:
+    """Build only complete 1h candles from four contiguous closed 15m candles."""
+    grouped: dict[int, list[list[float]]] = {}
+    for row in rows:
+        hour_start = (int(row[0]) // TIMEFRAMES["1h"]) * TIMEFRAMES["1h"]
+        grouped.setdefault(hour_start, []).append(row)
+
+    hourly: list[list[float]] = []
+    for hour_start, candles in sorted(grouped.items()):
+        candles.sort(key=lambda candle: int(candle[0]))
+        expected = [
+            hour_start + offset * TIMEFRAMES["15m"]
+            for offset in range(4)
+        ]
+        if [int(candle[0]) for candle in candles] != expected:
+            continue
+        hourly.append([
+            float(hour_start),
+            float(candles[0][1]),
+            max(float(candle[2]) for candle in candles),
+            min(float(candle[3]) for candle in candles),
+            float(candles[-1][4]),
+            sum(float(candle[5]) for candle in candles),
+        ])
+    return hourly
+
+
 def _fetch_history(
     exchange: Any,
     symbol: str,
@@ -172,15 +199,23 @@ def main() -> None:
         if exchange is not None and symbol not in exchange.markets:
             raise SystemExit(f"{args.exchange} Spot market is unavailable: {symbol}")
         datasets[symbol] = {}
-        for timeframe, duration in TIMEFRAMES.items():
-            end_exclusive = (now_ms // duration) * duration
-            rows = _fetch_history(
-                exchange, symbol, timeframe, since_ms, end_exclusive,
-                args.cache_dir, provider=args.exchange,
-                offline=args.offline, refresh=args.refresh,
+        end_exclusive = (now_ms // TIMEFRAMES["15m"]) * TIMEFRAMES["15m"]
+        fifteen = _fetch_history(
+            exchange, symbol, "15m", since_ms, end_exclusive,
+            args.cache_dir, provider=args.exchange,
+            offline=args.offline, refresh=args.refresh,
+        )
+        hourly = _aggregate_15m_to_1h(fifteen)
+        if len(hourly) < 100:
+            raise SystemExit(
+                f"Insufficient complete aggregated 1h history for {symbol}: {len(hourly)} rows"
             )
-            datasets[symbol][timeframe] = rows
-            print(f"Loaded {symbol} {timeframe}: {len(rows):,} candles")
+        datasets[symbol]["15m"] = fifteen
+        datasets[symbol]["1h"] = hourly
+        print(
+            f"Loaded {symbol}: {len(fifteen):,} 15m candles; "
+            f"aggregated {len(hourly):,} complete 1h candles"
+        )
 
     first_timestamp = max(
         int(series["15m"][0][0]) for series in datasets.values()
