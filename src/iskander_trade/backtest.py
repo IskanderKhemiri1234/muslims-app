@@ -22,6 +22,7 @@ class BacktestConfig:
     slow_period: int = 50
     initial_capital_usdt: float = 70.0
     risk_per_trade_usdt: float = 0.35
+    max_daily_loss_usdt: float = 1.40
     max_open_positions: int = 3
     max_position_notional_usdt: float = 20.0
     stop_loss_pct: float = 2.0
@@ -38,7 +39,7 @@ class BacktestConfig:
             raise ValueError("EMA periods are invalid.")
         if min(
             self.initial_capital_usdt, self.risk_per_trade_usdt,
-            self.max_position_notional_usdt, self.stop_loss_pct,
+            self.max_daily_loss_usdt, self.max_position_notional_usdt, self.stop_loss_pct,
             self.take_profit_pct,
         ) <= 0:
             raise ValueError("Capital, risk, sizing, stop and target must be positive.")
@@ -144,7 +145,10 @@ def run_ema_backtest(
     trades: list[dict[str, Any]] = []
     rejected: Counter[str] = Counter()
     capacity_rejections = 0
+    daily_loss_rejections = 0
     rejected_candidates = 0
+    daily_pnl_usdt = 0.0
+    daily_utc_day: int | None = None
     realized_pnl = 0.0
     peak_equity = cfg.initial_capital_usdt
     max_drawdown = 0.0
@@ -153,6 +157,7 @@ def run_ema_backtest(
 
     def close_position(symbol: str, raw_exit: float, timestamp: int, reason: str) -> None:
         nonlocal realized_pnl, total_fees, total_slippage, total_spread
+        nonlocal daily_pnl_usdt, daily_utc_day
         position = positions.pop(symbol)
         quantity = position["quantity"]
         spread_fraction = cfg.assumed_spread_pct / 100.0
@@ -168,6 +173,11 @@ def run_ema_backtest(
             position["raw_entry"] * spread_fraction / 2.0
             + raw_exit * spread_fraction / 2.0
         )
+        trade_day = timestamp // 86_400_000
+        if daily_utc_day != trade_day:
+            daily_utc_day = trade_day
+            daily_pnl_usdt = 0.0
+        daily_pnl_usdt += net
         realized_pnl += net
         total_fees += fees
         total_slippage += slip_cost
@@ -198,6 +208,11 @@ def run_ema_backtest(
             if index is not None:
                 current_rows[symbol] = (index, item["fifteen"][index])
 
+        current_day = timestamp // 86_400_000
+        if daily_utc_day != current_day:
+            daily_utc_day = current_day
+            daily_pnl_usdt = 0.0
+
         # Execute orders generated at the previous candle close, at this candle open.
         for symbol, (index, candle) in current_rows.items():
             if evaluation_start_ms is not None and timestamp < evaluation_start_ms:
@@ -208,6 +223,9 @@ def run_ema_backtest(
             if pending == "sell" and symbol in positions:
                 close_position(symbol, float(candle[1]), timestamp, "ema_cross_down")
             elif pending == "buy" and symbol not in positions:
+                if daily_pnl_usdt <= -cfg.max_daily_loss_usdt:
+                    daily_loss_rejections += 1
+                    continue
                 if len(positions) >= cfg.max_open_positions:
                     capacity_rejections += 1
                     continue
@@ -349,6 +367,7 @@ def run_ema_backtest(
         "rejected_candidates": rejected_candidates,
         "rejected_candidate_reasons": dict(rejected),
         "capacity_rejections": capacity_rejections,
+        "daily_loss_rejections": daily_loss_rejections,
         "fees_usdt": total_fees,
         "slippage_cost_usdt": total_slippage,
         "assumed_spread_cost_usdt": total_spread,
