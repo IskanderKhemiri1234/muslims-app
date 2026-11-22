@@ -108,7 +108,7 @@ def run() -> dict:
     prepared = engine.indicators(data)
     last_ts = min(int(data[s]["4h"][-1][0]) for s in engine.SYMBOLS)
     holdout_start = last_ts - 90 * engine.ONE_DAY
-    wf_start = since + 220 * engine.ONE_DAY
+    wf_start = since + 200 * engine.ONE_DAY
     scenarios = {}
     for strategy in ("donchian", "momentum"):
         for use_filter in (False, True):
