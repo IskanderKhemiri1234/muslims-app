@@ -105,6 +105,8 @@ def run_ema_backtest(
     *,
     screened: bool,
     config: BacktestConfig | None = None,
+    evaluation_start_ms: int | None = None,
+    evaluation_end_ms: int | None = None,
 ) -> dict[str, Any]:
     """Run a synchronized multi-symbol, long-only Spot portfolio simulation.
 
@@ -144,6 +146,7 @@ def run_ema_backtest(
     peak_equity = cfg.initial_capital_usdt
     max_drawdown = 0.0
     total_fees = total_slippage = total_spread = 0.0
+    last_active_rows: dict[str, list[float]] = {}
 
     def close_position(symbol: str, raw_exit: float, timestamp: int, reason: str) -> None:
         nonlocal realized_pnl, total_fees, total_slippage, total_spread
@@ -184,6 +187,8 @@ def run_ema_backtest(
         })
 
     for timestamp in sorted(timeline):
+        if evaluation_end_ms is not None and timestamp > evaluation_end_ms:
+            break
         current_rows: dict[str, tuple[int, list[float]]] = {}
         for symbol, item in prepared.items():
             index = item["index"].get(timestamp)
@@ -192,6 +197,8 @@ def run_ema_backtest(
 
         # Execute orders generated at the previous candle close, at this candle open.
         for symbol, (index, candle) in current_rows.items():
+            if evaluation_start_ms is not None and timestamp < evaluation_start_ms:
+                continue
             item = prepared[symbol]
             pending = item["pending"]
             item["pending"] = None
@@ -259,9 +266,12 @@ def run_ema_backtest(
             buy_cross = fast[index - 1] <= slow[index - 1] and fast[index] > slow[index]
             sell_cross = fast[index - 1] >= slow[index - 1] and fast[index] < slow[index]
             if sell_cross and symbol in positions:
-                item["pending"] = "sell"
+                if evaluation_start_ms is None or timestamp >= evaluation_start_ms:
+                    item["pending"] = "sell"
                 continue
             if not buy_cross or symbol in positions:
+                continue
+            if evaluation_start_ms is not None and timestamp + cfg.timeframe_ms < evaluation_start_ms:
                 continue
 
             if screened:
@@ -297,6 +307,10 @@ def run_ema_backtest(
                     continue
             item["pending"] = "buy"
 
+        if evaluation_start_ms is not None and timestamp < evaluation_start_ms:
+            continue
+        last_active_rows.update({symbol: candle for symbol, (_, candle) in current_rows.items()})
+
         # Mark-to-market drawdown includes estimated liquidation costs on open positions.
         unrealized = 0.0
         for symbol, position in positions.items():
@@ -316,10 +330,10 @@ def run_ema_backtest(
         peak_equity = max(peak_equity, equity)
         max_drawdown = max(max_drawdown, peak_equity - equity)
 
-    # Liquidate any remaining positions at the final available close.
+    # Liquidate remaining positions at the final close inside the evaluation window.
     for symbol in list(positions):
-        last_row = prepared[symbol]["fifteen"][-1]
-        close_position(symbol, float(last_row[4]), int(last_row[0]), "end_of_data")
+        last_row = last_active_rows.get(symbol, prepared[symbol]["fifteen"][-1])
+        close_position(symbol, float(last_row[4]), int(last_row[0]), "end_of_evaluation")
 
     summary = _metrics(
         trades, initial_capital=cfg.initial_capital_usdt,
@@ -363,11 +377,19 @@ def compare_strategies(
     datasets: dict[str, dict[str, list[list[float]]]],
     *,
     config: BacktestConfig | None = None,
+    evaluation_start_ms: int | None = None,
+    evaluation_end_ms: int | None = None,
 ) -> dict[str, Any]:
     cfg = config or BacktestConfig()
     return {
-        "baseline": run_ema_backtest(datasets, screened=False, config=cfg),
-        "screened": run_ema_backtest(datasets, screened=True, config=cfg),
+        "baseline": run_ema_backtest(
+            datasets, screened=False, config=cfg,
+            evaluation_start_ms=evaluation_start_ms, evaluation_end_ms=evaluation_end_ms,
+        ),
+        "screened": run_ema_backtest(
+            datasets, screened=True, config=cfg,
+            evaluation_start_ms=evaluation_start_ms, evaluation_end_ms=evaluation_end_ms,
+        ),
         "methodology": {
             "signal": "EMA fast/slow crossover on closed 15m candles",
             "entry": "next 15m candle open",
