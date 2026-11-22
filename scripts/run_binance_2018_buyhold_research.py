@@ -125,7 +125,7 @@ def annotate_binary_btc_regime(trades: list[dict], prepared: dict) -> None:
 
 
 def yearly_report(trades: list[dict], points: list[dict]) -> dict:
-    years = sorted({_year(t["closed_at"]) for t in trades})
+    years = sorted({_year(t["closed_at"]) for t in trades} | {_year(p["timestamp"]) for p in points})
     result = {}
     for year in years:
         subset = [t for t in trades if _year(t["closed_at"]) == year]
@@ -175,6 +175,7 @@ def buy_and_hold(data: dict, start_ms: int, end_ms: int, spread_pct: float,
     cash = CAPITAL
     holdings = {}
     last_close = {}
+    last_low = {}
     points = []
     entries = {}
     for ts in timeline:
@@ -182,6 +183,7 @@ def buy_and_hold(data: dict, start_ms: int, end_ms: int, spread_pct: float,
             row = by_symbol[symbol].get(ts)
             if row is not None:
                 last_close[symbol] = float(row[4])
+                last_low[symbol] = float(row[3])
                 if symbol not in holdings:
                     target_notional = allocation / (1 + fee)
                     fill = float(row[1]) * (1 + engine.SLIPPAGE_RATE + half_spread)
@@ -196,7 +198,9 @@ def buy_and_hold(data: dict, start_ms: int, end_ms: int, spread_pct: float,
                     }
         equity = cash + sum(holdings[symbol] * last_close[symbol]
                             for symbol in holdings if symbol in last_close)
-        points.append({"timestamp": ts, "equity": equity, "adverse_equity": equity})
+        adverse_equity = cash + sum(holdings[symbol] * last_low[symbol]
+                                    for symbol in holdings if symbol in last_low)
+        points.append({"timestamp": ts, "equity": equity, "adverse_equity": adverse_equity})
     metrics = curve_metrics(points, start_ms, end_ms)
     metrics.update({
         "benchmark": "BTC buy & hold" if btc_only else "equal-weight six-market buy & hold",
@@ -242,7 +246,11 @@ def run() -> dict:
 
     prepared = engine.indicators(data)
     last_ts = min(int(data[s]["4h"][-1][0]) for s in engine.SYMBOLS)
-    holdout_start = last_ts - HOLDOUT_DAYS * engine.ONE_DAY
+    now_ms = int(datetime.now(UTC).timestamp() * 1000)
+    if now_ms - (last_ts + engine.FOUR_HOURS) > 48 * 60 * 60 * 1000:
+        raise ArchiveUnavailable("Binance Vision latest completed 4h candle is over 48 hours stale")
+    evaluation_end = last_ts + engine.FOUR_HOURS
+    holdout_start = evaluation_end - HOLDOUT_DAYS * engine.ONE_DAY
     wf_start = START_MS + 200 * engine.ONE_DAY
     if holdout_start <= wf_start:
         raise ArchiveUnavailable("Insufficient Binance history for a 90-day Holdout after warm-up")
