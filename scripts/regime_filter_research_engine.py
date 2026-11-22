@@ -173,6 +173,7 @@ def metric_summary(trades: list[dict[str, Any]], max_dd: float, start_equity: fl
 def simulate(
     prepared: dict[str, dict[str, Any]], strategy: str, risk_fraction: float,
     spread_pct: float, start_ms: int, end_ms: int, fold_days: int = 30,
+    btc_filter: bool = False, liquidate_at_end: bool = False,
 ) -> dict[str, Any]:
     """Run one continuous portfolio from start_ms to end_ms; never reset at folds."""
     timeline = sorted({int(r[0]) for x in prepared.values() for r in x["bars"]
@@ -186,6 +187,7 @@ def simulate(
     fold_points: dict[int, list[float]] = defaultdict(list)
     fold_trades: dict[int, list[dict[str, Any]]] = defaultdict(list)
     last_bar: dict[str, list[float]] = {}
+    last_seen: dict[str, int] = {}
     fold_ms = fold_days * ONE_DAY
     first_equity = INITIAL_CAPITAL
 
@@ -216,6 +218,7 @@ def simulate(
             "net_pnl_usdt": net,
             "exit_reason": reason, "bars_held": max(1, (ts - p["opened_at"]) // FOUR_HOURS),
             "entry_atr_pct": p["entry_atr"] / p["entry_fill"] * 100,
+            "entry_btc_regime": p.get("entry_regime", "unknown"),
         }
         trades.append(trade)
         if ts >= start_ms:
@@ -245,6 +248,22 @@ def simulate(
                 current[symbol] = (idx, item["bars"][idx])
                 last_bar[symbol] = item["bars"][idx]
 
+        # Missing intervals are never filled. Exit carried positions at the first observed open.
+        for symbol, (idx, bar) in current.items():
+            prior = last_seen.get(symbol)
+            if prior is not None and ts - prior != FOUR_HOURS and symbol in positions:
+                close(symbol, bar[1], ts, "data_gap_exit")
+            last_seen[symbol] = ts
+        btc_item = prepared.get("BTC/USDT")
+        btc_on = bool(btc_item and daily_regime(
+            btc_item["daily_timestamps"], btc_item["daily_closes"],
+            btc_item["daily_sma200"], ts + FOUR_HOURS))
+        btc_idx = bisect.bisect_right(btc_item["daily_timestamps"], ts) - 1 if btc_item else -1
+        btc_state = "unknown"
+        if btc_idx >= 0 and math.isfinite(btc_item["daily_sma200"][btc_idx]):
+            ratio = btc_item["daily_closes"][btc_idx] / btc_item["daily_sma200"][btc_idx]
+            btc_state = "bull" if ratio > 1.01 else ("bear" if ratio < 0.99 else "sideways")
+
         # Previously generated orders execute at this bar's open.
         for symbol, (idx, bar) in current.items():
             item = prepared[symbol]
@@ -259,7 +278,7 @@ def simulate(
                 if not math.isfinite(atr) or atr <= 0:
                     continue
                 equity = max(0.0, marked_equity(current, use_open=True))
-                stop_distance = 2.5 * atr if strategy == "pullback" else 3.0 * atr
+                stop_distance = 3.0 * atr
                 risk_budget = equity * risk_fraction
                 cost_fraction = (stop_distance / bar[1] +
                                  2 * (FEE_RATE + SLIPPAGE_RATE) + spread_pct / 100)
@@ -276,7 +295,7 @@ def simulate(
                     "entry_fee": notional * FEE_RATE,
                     "entry_execution_cost": abs(fill - bar[1]) * qty,
                     "raw_entry_price": bar[1], "opened_at": ts, "stop": bar[1] - stop_distance, "entry_atr": atr,
-                    "highest_close": bar[1],
+                    "highest_close": bar[1], "entry_regime": btc_state,
                 }
 
         # Stops are evaluated before updating trailing highs: no same-bar lookahead.
@@ -291,49 +310,27 @@ def simulate(
 
         # Signals are calculated from this completed candle and fill next candle.
         if ts >= start_ms:
-            if strategy in ("donchian", "pullback"):
+            if strategy == "donchian":
                 for symbol, (idx, bar) in current.items():
                     x = prepared[symbol]
-                    if idx < 200 or not math.isfinite(x["atr"][idx]):
+                    if idx < 55 or not math.isfinite(x["atr"][idx]):
                         continue
-                    regime = daily_regime(x["daily_timestamps"], x["daily_closes"],
-                                          x["daily_sma200"], ts + FOUR_HOURS)
-                    if strategy == "donchian":
-                        if idx < 55:
-                            continue
-                        high = max(r[2] for r in x["bars"][idx - 55:idx])
-                        low = min(r[3] for r in x["bars"][idx - 20:idx])
-                        if symbol in positions and (not regime or bar[4] < low):
-                            x["pending"] = "sell"
-                        elif symbol not in positions and regime and bar[4] > high:
-                            x["pending"] = "buy"
-                    else:
-                        # Locked, non-optimized trend-pullback rule:
-                        # daily SMA200 regime + EMA50>EMA200 trend;
-                        # enter on reclaim of EMA20 with RSI 45..65;
-                        # exit on close below EMA50 or loss of daily regime.
-                        prev_close = x["bars"][idx - 1][4]
-                        prev_ema20 = x["ema20"][idx - 1]
-                        trend = x["ema50"][idx] > x["ema200"][idx]
-                        reclaim = prev_close <= prev_ema20 and bar[4] > x["ema20"][idx]
-                        if symbol in positions:
-                            if not regime or bar[4] < x["ema50"][idx]:
-                                x["pending"] = "sell"
-                            else:
-                                p = positions[symbol]
-                                p["highest_close"] = max(p["highest_close"], bar[4])
-                                p["stop"] = max(p["stop"], p["highest_close"] - 3.0 * x["atr"][idx])
-                        elif (regime and trend and reclaim and
-                              45.0 <= x["rsi"][idx] <= 65.0):
-                            x["pending"] = "buy"
+                    if int(bar[0]) - int(x["bars"][idx-55][0]) != 55 * FOUR_HOURS:
+                        continue
+                    if int(bar[0]) - int(x["bars"][idx-20][0]) != 20 * FOUR_HOURS:
+                        continue
+                    high = max(r[2] for r in x["bars"][idx-55:idx])
+                    low = min(r[3] for r in x["bars"][idx-20:idx])
+                    if symbol in positions and bar[4] < low:
+                        x["pending"] = "sell"
+                    elif symbol not in positions and bar[4] > high and (not btc_filter or btc_on):
+                        x["pending"] = "buy"
             elif strategy == "momentum":
                 if ts // ONE_DAY != (ts - FOUR_HOURS) // ONE_DAY:
                     scores = {}
                     for symbol, (idx, bar) in current.items():
                         x = prepared[symbol]
-                        if idx < 540 or not daily_regime(
-                            x["daily_timestamps"], x["daily_closes"], x["daily_sma200"],
-                            ts + FOUR_HOURS):
+                        if idx < 540 or int(bar[0]) - int(x["bars"][idx-540][0]) != 540 * FOUR_HOURS:
                             continue
                         old = x["bars"][idx - 540][4]
                         if old > 0:
@@ -342,7 +339,7 @@ def simulate(
                     for symbol, x in prepared.items():
                         if symbol in positions and symbol not in leaders:
                             x["pending"] = "sell"
-                        elif symbol not in positions and symbol in leaders:
+                        elif symbol not in positions and symbol in leaders and (not btc_filter or btc_on):
                             x["pending"] = "buy"
             else:
                 raise ValueError(f"Unknown strategy: {strategy}")
