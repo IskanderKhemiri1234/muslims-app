@@ -6,7 +6,7 @@
 <title>Iskander AI Trade</title>
 <style>
 :root{color-scheme:dark;--bg:#050b09;--surface:#0a1511;--surface2:#0d1d17;--surface3:#10251d;--line:rgba(116,190,154,.15);--line2:rgba(116,190,154,.28);--green:#16d99a;--green2:#0caa78;--gold:#d8b66a;--text:#f1f7f2;--muted:#82958b;--red:#f07878;--shadow:0 18px 55px rgba(0,0,0,.32)}
-*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 70% -10%,rgba(14,106,70,.23),transparent 38%),radial-gradient(ellipse at 0 55%,rgba(11,74,53,.13),transparent 35%),var(--bg);color:var(--text);font:14px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:.01em}
+*{box-sizing:border-box}[hidden]{display:none!important}html{scroll-behavior:smooth;scroll-padding-top:16px}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 70% -10%,rgba(14,106,70,.23),transparent 38%),radial-gradient(ellipse at 0 55%,rgba(11,74,53,.13),transparent 35%),var(--bg);color:var(--text);font:14px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:.01em}
 button,input{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible{outline:2px solid var(--green);outline-offset:3px}
 .shell{max-width:1440px;margin:auto;min-height:100vh;display:grid;grid-template-columns:76px minmax(0,1fr)}
 .rail{position:sticky;top:0;height:100vh;border-right:1px solid var(--line);background:rgba(4,12,9,.78);backdrop-filter:blur(20px);display:flex;align-items:center;flex-direction:column;padding:22px 12px;gap:24px;z-index:5}
@@ -35,7 +35,7 @@ main{min-width:0;padding:26px clamp(16px,3vw,42px) 48px}.topbar{display:flex;ali
 .content-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(280px,.8fr);gap:16px;align-items:start}.panel{padding:20px}.panel-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:16px}.panel-head h3{font-size:14px;margin:0;font-weight:700}.chart-meta{display:flex;gap:7px;align-items:center}.tag{font-size:10px;color:#8da99a;border:1px solid var(--line);padding:5px 9px;border-radius:99px}.chart-wrap{height:210px;position:relative;background:linear-gradient(180deg,rgba(13,85,57,.09),transparent);border-radius:14px;overflow:hidden}.chart-wrap svg{width:100%;height:100%;overflow:visible}.chart-grid{stroke:rgba(144,184,158,.1);stroke-width:1;stroke-dasharray:4 6}.chart-line{fill:none;stroke:#23d99a;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 0 7px rgba(22,217,154,.28))}.chart-area{fill:url(#chartFill)}.chart-empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-size:12px;text-align:center;padding:20px;pointer-events:none}
 .market-list{display:grid;gap:8px}.market-row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px;padding:11px 12px;border:1px solid rgba(116,190,154,.09);border-radius:13px;background:rgba(5,15,10,.48)}.coin{display:flex;align-items:center;gap:10px;min-width:0}.coin-icon{width:31px;height:31px;flex:0 0 31px;border-radius:50%;display:grid;place-items:center;background:rgba(22,217,154,.09);color:#7fe6b9;font-size:10px;font-weight:800}.coin-name{font-size:12px;font-weight:700}.coin-pair{font-size:10px;color:var(--muted)}.coin-price{text-align:right;font-size:12px;font-weight:700}.coin-change{font-size:10px;color:var(--muted);text-align:right}
 .position-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.position{border:1px solid var(--line);border-radius:13px;padding:12px;background:rgba(5,15,10,.45)}.position strong{font-size:12px}.position small{display:block;color:var(--muted);font-size:10px;margin-top:5px}.empty{padding:24px 12px;text-align:center;color:var(--muted);font-size:12px;border:1px dashed var(--line2);border-radius:14px}
-.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;white-space:nowrap}th{text-align:left;color:var(--muted);font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;padding:10px;border-bottom:1px solid var(--line)}td{padding:12px 10px;border-bottom:1px solid rgba(116,190,154,.08);font-size:11px}tbody tr:last-child td{border-bottom:0}.side{font-size:9px;font-weight:800;padding:4px 7px;border-radius:7px}.side.buy{color:var(--green);background:rgba(22,217,154,.1)}.side.sell{color:#f1b36b;background:rgba(241,179,107,.1)}
+.table-wrap{overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;max-width:100%}table{width:100%;border-collapse:collapse;white-space:nowrap}#trades table{min-width:390px}.research table{min-width:520px}th{text-align:left;color:var(--muted);font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;padding:10px;border-bottom:1px solid var(--line)}td{padding:12px 10px;border-bottom:1px solid rgba(116,190,154,.08);font-size:11px}tbody tr:last-child td{border-bottom:0}.side{font-size:9px;font-weight:800;padding:4px 7px;border-radius:7px}.side.buy{color:var(--green);background:rgba(22,217,154,.1)}.side.sell{color:#f1b36b;background:rgba(241,179,107,.1)}
 .engine-card{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:17px 19px;margin-top:16px}.engine-copy strong{font-size:12px}.engine-copy p{margin:4px 0 0;color:var(--muted);font-size:11px}.engine-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .auth{max-width:480px;margin:8vh auto;padding:26px}.auth h2{margin:0 0 6px}.auth p{color:var(--muted);font-size:12px}.auth-row{display:flex;gap:8px;margin-top:18px}.auth input{min-width:0;flex:1;background:#06120d;border:1px solid var(--line2);border-radius:11px;padding:12px;color:var(--text)}#message{font-size:11px;color:#a7c4b3;min-height:18px;margin-top:10px}.research{margin-top:16px}.research summary{cursor:pointer;color:#9eb7a8;font-size:12px}.research-body{padding-top:14px}.footer{text-align:center;color:#52695d;font-size:10px;padding:26px 0 8px}
 .mobile-nav{display:none}
@@ -49,6 +49,57 @@ main{min-width:0;padding:26px clamp(16px,3vw,42px) 48px}.topbar{display:flex;ali
  .mobile-nav{position:fixed;display:flex;z-index:10;bottom:0;left:0;right:0;padding:9px 14px calc(9px + env(safe-area-inset-bottom));background:rgba(4,12,9,.94);backdrop-filter:blur(22px);border-top:1px solid var(--line);justify-content:space-around}.mobile-nav a{display:flex;flex-direction:column;align-items:center;gap:3px;text-decoration:none;color:#748a7e;font-size:9px;min-width:54px}.mobile-nav a span:first-child{font-size:17px}.mobile-nav a.active{color:var(--green)}
 }
 @media(min-width:1200px){main{padding-top:34px}.balance-card{min-height:230px}.chart-wrap{height:245px}}
+
+/* Physical-phone refinements */
+@media(max-width:600px){
+ html{scroll-padding-bottom:calc(86px + env(safe-area-inset-bottom))}
+ body{overflow-x:hidden;-webkit-tap-highlight-color:transparent}
+ main{padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right))}
+ section[id],article[id]{scroll-margin-top:14px}
+ button,.mobile-nav a{touch-action:manipulation}
+ .btn,.iconbtn{min-height:44px}
+ .iconbtn{min-width:44px}
+ .auth input{min-height:48px;font-size:16px}
+ .mobile-nav{min-height:64px;padding-left:max(10px,env(safe-area-inset-left));padding-right:max(10px,env(safe-area-inset-right));padding-bottom:calc(9px + env(safe-area-inset-bottom))}
+ .mobile-nav a{min-height:44px;justify-content:center;flex:1}
+ .mobile-nav a:focus-visible{outline-offset:-2px;border-radius:10px}
+ .market-list,.position-grid{min-width:0}
+ .table-wrap{margin-right:-2px}
+}
+@media(max-width:380px){
+ main{padding-left:11px;padding-right:11px}
+ .topbar{gap:8px}
+ .brandline{gap:8px}
+ .brandline h1{font-size:13px;letter-spacing:.08em}
+ .brandline small{font-size:8px;letter-spacing:.12em}
+ .top-actions{gap:5px}
+ .live-pill{padding:6px 7px;font-size:9px}
+ .iconbtn{width:40px;min-width:40px;height:40px}
+ .balance-card{padding:17px}
+ .balance-value{font-size:33px}
+ .balance-bottom{gap:7px}
+ .balance-bottom .btn{flex:1;padding:9px 8px;font-size:10px}
+ .stats{gap:6px}
+ .stat{padding:10px 8px}
+ .stat .value{font-size:14px}
+ .market-list{grid-template-columns:1fr}
+ .panel{padding:13px}
+ .mobile-nav a{font-size:8px}
+}
+@media(max-height:520px) and (orientation:landscape) and (max-width:900px){
+ .shell{padding-bottom:62px}
+ main{padding-top:10px}
+ .topbar{margin-bottom:12px}
+ .mobile-nav{padding-top:5px;padding-bottom:calc(5px + env(safe-area-inset-bottom));min-height:54px}
+ .mobile-nav a{min-height:40px;gap:1px}
+ .mobile-nav a span:first-child{font-size:15px}
+ .chart-wrap{height:145px}
+}
+@media(prefers-reduced-motion:reduce){
+ html{scroll-behavior:auto}
+ *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
+
 </style>
 </head>
 <body>
@@ -130,7 +181,7 @@ main{min-width:0;padding:26px clamp(16px,3vw,42px) 48px}.topbar{display:flex;ali
  <div id="message" role="status"></div>
  <p class="subtle">Paper trading only. This terminal cannot place real exchange orders.</p>
 </section>
-<nav class="mobile-nav" aria-label="Mobile navigation"><a class="active" href="#overview"><span>▦</span><span>Home</span></a><a href="#markets"><span>⌁</span><span>Markets</span></a><a href="#positions"><span>◈</span><span>Positions</span></a><a href="#trades"><span>⇄</span><span>Activity</span></a></nav>
+<nav class="mobile-nav" id="mobileNav" aria-label="Mobile navigation" hidden><a class="active" href="#overview"><span>▦</span><span>Home</span></a><a href="#markets"><span>⌁</span><span>Markets</span></a><a href="#positions"><span>◈</span><span>Positions</span></a><a href="#trades"><span>⇄</span><span>Activity</span></a></nav>
 <script>
 let token="";
 let busy=false;
@@ -220,7 +271,7 @@ async function connect(){
  try{
   const [status,markets,health]=await Promise.all([api("/api/v1/status"),api("/api/v1/markets"),fetch("/health",{cache:"no-store"}).then(r=>{if(!r.ok)throw Error("Health check failed");return r.json()})]);
   renderStatus(status,health);renderMarkets(markets.markets||[]);renderPositions(status.positions);renderTrades(status.trade_history);renderChart(status.trade_history);
-  $("authPanel").hidden=true;$("appShell").hidden=false;setMessage("");
+  $("authPanel").hidden=true;$("appShell").hidden=false;$("mobileNav").hidden=false;setMessage("");
  }catch(error){token="";setMessage("Could not unlock dashboard: "+error.message)}
  finally{$("connectButton").disabled=false}
 }
@@ -242,6 +293,17 @@ async function evaluateModel(){
  catch(error){setMessage("Research evaluation unavailable: "+error.message)}
  finally{$("researchButton").disabled=false;$("researchButton").textContent="Research evaluation"}
 }
-function disconnect(){token="";$("appShell").hidden=true;$("authPanel").hidden=false;$("token").value="";$("connectionState").textContent="Locked";setMessage("Dashboard locked.")}
+function disconnect(){token="";$("appShell").hidden=true;$("mobileNav").hidden=true;$("authPanel").hidden=false;$("token").value="";$("connectionState").textContent="Locked";setMessage("Dashboard locked.")}
+
+document.querySelectorAll(".mobile-nav a").forEach(link=>{
+ link.addEventListener("click",()=>{
+  document.querySelectorAll(".mobile-nav a").forEach(item=>{
+   const active=item===link;
+   item.classList.toggle("active",active);
+   if(active)item.setAttribute("aria-current","page");else item.removeAttribute("aria-current");
+  });
+ });
+});
+
 </script>
 </body></html>
