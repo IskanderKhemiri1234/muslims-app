@@ -89,41 +89,39 @@ def test_daily_btc_filter_uses_only_last_completed_daily_candle():
 def test_momentum_ranking_has_no_future_bar_leakage():
     data, base = _momentum_fixture()
     start = base + 220 * engine.ONE_DAY
-    end = base + 223 * engine.ONE_DAY
-    prepared = engine.indicators(data)
-    original = engine.simulate(
-        prepared, "momentum", 0.005, 0.10, start, end,
-        btc_filter=False, liquidate_at_end=False,
-    )
+    signal_timestamp = start + 5 * engine.FOUR_HOURS
+    next_open = signal_timestamp + engine.FOUR_HOURS
 
-    changed_future = {
-        symbol: {
-            "4h": [list(row) for row in series["4h"]],
-            "1d": [list(row) for row in series["1d"]],
-        }
+    original_data = {
+        symbol: {"4h": [list(row) for row in series["4h"]],
+                 "1d": [list(row) for row in series["1d"]]}
         for symbol, series in data.items()
     }
-    for series in changed_future.values():
-        for row in series["4h"]:
-            if int(row[0]) > end:
-                row[1] *= 100
-                row[2] *= 100
-                row[3] *= 100
-                row[4] *= 100
-        for row in series["1d"]:
-            if int(row[0]) > end:
-                row[1] *= 100
-                row[2] *= 100
-                row[3] *= 100
-                row[4] *= 100
-    altered = engine.simulate(
-        engine.indicators(changed_future), "momentum", 0.005, 0.10, start, end,
-        btc_filter=False, liquidate_at_end=False,
+    altered_future = {
+        symbol: {"4h": [list(row) for row in series["4h"]],
+                 "1d": [list(row) for row in series["1d"]]}
+        for symbol, series in data.items()
+    }
+    btc_future_bar = next(
+        row for row in altered_future["BTC/USDT"]["4h"] if int(row[0]) == next_open
     )
-    assert original["open_positions"]
-    assert original["trades"] == altered["trades"]
-    assert original["open_positions"] == altered["open_positions"]
+    # Keep the next open unchanged, but make its future close dominate momentum
+    # if the strategy incorrectly reads the next candle before it has completed.
+    btc_future_bar[2] = 1001.0
+    btc_future_bar[4] = 1000.0
 
+    original = engine.simulate(
+        engine.indicators(original_data), "momentum", 0.005, 0.10,
+        start, next_open, btc_filter=False, liquidate_at_end=False,
+    )
+    altered = engine.simulate(
+        engine.indicators(altered_future), "momentum", 0.005, 0.10,
+        start, next_open, btc_filter=False, liquidate_at_end=False,
+    )
+    original_symbols = {position["symbol"] for position in original["open_positions"]}
+    altered_symbols = {position["symbol"] for position in altered["open_positions"]}
+    assert original_symbols == {"ETH/USDT", "BNB/USDT"}
+    assert altered_symbols == original_symbols
 
 def test_buy_and_hold_entry_costs_are_charged_once():
     import importlib.util
