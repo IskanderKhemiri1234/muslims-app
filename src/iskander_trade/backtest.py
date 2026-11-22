@@ -53,6 +53,30 @@ class BacktestConfig:
             raise ValueError("Spread assumptions/limit are invalid.")
 
 
+def aggregate_15m_to_1h(rows: list[list[float]]) -> list[list[float]]:
+    """Build only complete 1h candles from four contiguous closed 15m candles."""
+    grouped: dict[int, list[list[float]]] = {}
+    for row in rows:
+        hour_start = (int(row[0]) // 3_600_000) * 3_600_000
+        grouped.setdefault(hour_start, []).append(row)
+
+    hourly: list[list[float]] = []
+    for hour_start, candles in sorted(grouped.items()):
+        candles.sort(key=lambda candle: int(candle[0]))
+        expected = [hour_start + offset * 900_000 for offset in range(4)]
+        if [int(candle[0]) for candle in candles] != expected:
+            continue
+        hourly.append([
+            float(hour_start),
+            float(candles[0][1]),
+            max(float(candle[2]) for candle in candles),
+            min(float(candle[3]) for candle in candles),
+            float(candles[-1][4]),
+            sum(float(candle[5]) for candle in candles),
+        ])
+    return hourly
+
+
 def _validate_rows(rows: list[list[float]], duration_ms: int, symbol: str) -> None:
     if len(rows) < 3:
         raise ValueError(f"{symbol}: insufficient historical candles")
