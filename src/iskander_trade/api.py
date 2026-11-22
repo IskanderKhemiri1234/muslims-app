@@ -1,4 +1,4 @@
-"""Paper-only FastAPI API with a single-process 15-minute scheduler."""
+"""Paper-only FastAPI dashboard API with a single-process 15-minute scheduler."""
 from __future__ import annotations
 
 import asyncio
@@ -44,8 +44,9 @@ def require_dashboard_token(authorization: str | None = Header(default=None)) ->
 def _run_one_cycle() -> dict[str, Any]:
     if not cycle_lock.acquire(blocking=False):
         raise HTTPException(status_code=409, detail="A paper cycle is already running.")
-    client = BinanceMarketData()
+    client: BinanceMarketData | None = None
     try:
+        client = BinanceMarketData()
         engine = PaperTradingEngine(settings, client, load_state(settings.state_path))
         engine.run_cycle()
         return {"status": "completed", "mode": "paper", "portfolio": status_payload()}
@@ -53,8 +54,11 @@ def _run_one_cycle() -> dict[str, Any]:
         log.exception("Paper cycle failed")
         raise HTTPException(status_code=502, detail=f"Paper cycle could not complete: {exc}") from exc
     finally:
-        client.close()
-        cycle_lock.release()
+        try:
+            if client is not None:
+                client.close()
+        finally:
+            cycle_lock.release()
 
 
 def _seconds_until_next_closed_candle() -> float:
@@ -137,7 +141,7 @@ def status_payload() -> dict[str, Any]:
         "total_realized_pnl_usdt": state.get("total_realized_pnl_usdt", 0.0),
         "positions": state.get("positions", {}),
         "trade_history": state.get("trade_history", [])[-50:],
-        "state_persistence": "atomic_json_on_configured_host_path",
+        "state_persistence": "atomic_json_with_backup_on_configured_host_path",
         "automatic_cycle": AUTO_PAPER_ENABLED,
     }
 
