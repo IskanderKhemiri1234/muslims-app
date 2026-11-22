@@ -115,8 +115,8 @@ class PaperTradingEngine:
                 spread_pct=self.market_data.fetch_spread_pct(symbol),
                 max_spread_pct=self.settings.max_spread_pct,
             )
-        except Exception as exc:
-            log.exception("Higher-timeframe selection data unavailable for %s", symbol)
+        except Exception:
+            log.exception("Selection inputs unavailable for %s", symbol)
             selection = SelectionDecision(
                 False, "unavailable", ("higher_timeframe_data_unavailable",),
                 {},
