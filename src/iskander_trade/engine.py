@@ -121,8 +121,8 @@ class PaperTradingEngine:
                 False, "unavailable", ("higher_timeframe_data_unavailable",),
                 {},
             )
-        self._record_decision(symbol, signal.candle_timestamp, selection)
         if not selection.accepted:
+            self._record_decision(symbol, signal.candle_timestamp, selection)
             return
 
         exposure = sum(
@@ -147,6 +147,14 @@ class PaperTradingEngine:
         )
         if not decision.allowed:
             log.info("RISK REJECT %s: %s", symbol, decision.reason)
+            self._record_decision(
+                symbol,
+                signal.candle_timestamp,
+                SelectionDecision(
+                    False, selection.regime, (f"risk_rejected:{decision.reason}",),
+                    selection.metrics,
+                ),
+            )
             return
 
         entry_fee = decision.notional_usdt * self.settings.taker_fee_rate
@@ -165,6 +173,7 @@ class PaperTradingEngine:
             "entry_fee_usdt": entry_fee, "reason": signal.reason,
             "selection_regime": selection.regime, "opened_at": signal.candle_timestamp,
         })
+        self._record_decision(symbol, signal.candle_timestamp, selection)
         log.info(
             "PAPER BUY %s qty=%.8f price=%.4f notional=%.2f entry_fee=%.4f",
             symbol, decision.quantity, entry_price, decision.notional_usdt, entry_fee,
