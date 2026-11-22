@@ -5,8 +5,6 @@ import sys
 import types
 from pathlib import Path
 
-import pytest
-
 sys.modules.setdefault("ccxt", types.ModuleType("ccxt"))
 
 ROOT = Path(__file__).resolve().parents[1]
