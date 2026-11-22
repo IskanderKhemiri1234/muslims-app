@@ -5,6 +5,7 @@ on:
     branches: [research/4h-trend-momentum]
     paths:
       - "scripts/run_trend_research.py"
+      - "scripts/__init__.py"
       - "tests/test_trend_research.py"
       - ".github/workflows/trend-research.yml"
   workflow_dispatch:
