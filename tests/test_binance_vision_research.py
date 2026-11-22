@@ -5,6 +5,8 @@ import sys
 import types
 from pathlib import Path
 
+import pytest
+
 sys.modules.setdefault("ccxt", types.ModuleType("ccxt"))
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -144,3 +146,21 @@ def test_buy_and_hold_entry_costs_are_charged_once():
     assert len(result["entries"]) == 1
     assert result["entries"]["BTC/USDT"]["commission_usdt"] > 0
     assert result["entry_cost_model"]["no_exit_cost_charged"] is True
+
+
+def test_calmar_uses_peak_relative_maximum_drawdown():
+    runner_spec = importlib.util.spec_from_file_location(
+        "binance_calmar_runner_test", ROOT / "scripts" / "run_binance_2018_buyhold_research.py"
+    )
+    runner = importlib.util.module_from_spec(runner_spec)
+    assert runner_spec and runner_spec.loader
+    runner_spec.loader.exec_module(runner)
+    points = [
+        {"timestamp": 0, "equity": 70.0, "adverse_equity": 70.0},
+        {"timestamp": engine.ONE_DAY, "equity": 80.0, "adverse_equity": 80.0},
+        {"timestamp": 2 * engine.ONE_DAY, "equity": 74.0, "adverse_equity": 72.0},
+    ]
+    result = runner.curve_metrics(points, 0, 3 * engine.ONE_DAY)
+    assert result["max_drawdown_usdt"] == pytest.approx(8.0)
+    assert result["max_drawdown_pct"] == pytest.approx(10.0)
+    assert result["calmar"] == pytest.approx(result["cagr_pct"] / 100 / 0.10)
