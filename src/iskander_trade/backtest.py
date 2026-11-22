@@ -60,7 +60,7 @@ def _validate_rows(rows: list[list[float]], duration_ms: int, symbol: str) -> No
             raise ValueError(f"{symbol}: malformed candle at {index}")
         timestamp, open_, high, low, close, volume = map(float, row[:6])
         values = (timestamp, open_, high, low, close, volume)
-        if any(value != value or abs(value) == float("inf") for value in values):
+        if any(not math.isfinite(value) for value in values):
             raise ValueError(f"{symbol}: non-finite candle at {index}")
         if int(timestamp) != timestamp or int(timestamp) % duration_ms:
             raise ValueError(f"{symbol}: invalid candle timestamp at {index}")
