@@ -26,7 +26,7 @@ All signals use completed candles and execute at the next 4h open. These rules, 
 
 ## Measurement protocol
 
-The scheduled GitHub Actions workflow runs every four hours. Each run replays the complete post-freeze candle history from the fixed start, with pre-freeze candles used only for indicator warm-up. The replay does not force-close open positions at report boundaries; this prevents artificial repeated exits. Reports are cumulative snapshots, not independent samples.
+The GitHub Actions workflow is manually dispatchable on this isolated research branch. GitHub scheduled workflows run from the repository's default branch; enabling a four-hour schedule would therefore require changing the default branch, which is intentionally out of scope because main must remain untouched. Each manual run replays the complete post-freeze candle history from the fixed start, with pre-freeze candles used only for indicator warm-up. The replay does not force-close open positions at report boundaries; this prevents artificial repeated exits. Reports are cumulative snapshots, not independent samples. The workflow can be run again as new candles arrive.
 
 For each strategy, record closed trades, win rate, average win/loss, net expectancy after fees/spread/slippage, profit factor, drawdown, symbol/exit/month attribution, open positions, and drift against the historical walk-forward and holdout reference figures. A strategy is not eligible for a decision until it has at least 100 closed forward trades.
 
