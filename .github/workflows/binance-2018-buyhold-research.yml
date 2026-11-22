@@ -1,0 +1,50 @@
+name: Iskander Binance Vision Buy & Hold Research
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/binance-2018-buyhold-v1]
+    paths:
+      - "scripts/binance_vision_data.py"
+      - "scripts/run_binance_2018_buyhold_research.py"
+      - "tests/test_binance_vision_research.py"
+      - ".github/workflows/binance-2018-buyhold-research.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iskander-binance-buyhold-research
+  cancel-in-progress: false
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - name: Checkout isolated research branch
+        uses: actions/checkout@v4
+        with:
+          ref: research/binance-2018-buyhold-v1
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install project test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Unit tests
+        run: pytest -q tests/test_regime_filter_research.py tests/test_binance_vision_research.py
+      - name: Ruff
+        run: ruff check scripts/regime_filter_research_engine.py scripts/binance_vision_data.py scripts/run_binance_2018_buyhold_research.py tests/test_regime_filter_research.py tests/test_binance_vision_research.py
+      - name: Download Binance Vision history and run frozen scenarios
+        run: python scripts/run_binance_2018_buyhold_research.py
+      - name: Upload complete JSON research report
+        uses: actions/upload-artifact@v4
+        with:
+          name: iskander-binance-2018-buyhold-report
+          path: reports/binance_2018_buyhold_research.json
+          if-no-files-found: error
+          retention-days: 90
