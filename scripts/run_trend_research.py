@@ -9,7 +9,6 @@ import argparse
 import json
 import math
 import time
-from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -43,7 +42,8 @@ def fetch_history(exchange: Any, symbol: str, timeframe: str, since_ms: int) -> 
             break
         cursor = next_cursor
         time.sleep(exchange.rateLimit / 1000)
-    result = [rows[key] for key in sorted(rows)]
+    now_ms = int(time.time() * 1000)
+    result = [rows[key] for key in sorted(rows) if key + duration <= now_ms]
     if len(result) < 220:
         raise ValueError(f"{symbol} {timeframe}: insufficient history ({len(result)})")
     previous = None
@@ -105,8 +105,6 @@ def simulate(
     timeline: set[int] = set()
     for symbol, series in data.items():
         bars, daily = series["4h"], series["1d"]
-        highs = [r[2] for r in bars]
-        lows = [r[3] for r in bars]
         atr = atr_values(bars)
         prepared[symbol] = {"bars": bars, "daily": daily, "atr": atr,
                             "index": {int(r[0]): i for i, r in enumerate(bars)},
@@ -161,7 +159,12 @@ def simulate(
                 equity = max(0.0, INITIAL_CAPITAL + realized)
                 stop_distance = 3.0 * a
                 risk_budget = equity * risk_fraction
-                risk_notional = risk_budget * bar[1] / stop_distance
+                effective_risk_fraction = (
+                    stop_distance / bar[1]
+                    + 2.0 * (FEE_RATE + SLIPPAGE_RATE)
+                    + spread_pct / 100.0
+                )
+                risk_notional = risk_budget / effective_risk_fraction
                 available = max(0.0, equity - sum(p["notional"] for p in positions.values()))
                 notional = min(MAX_NOTIONAL, available, risk_notional)
                 if notional < 1.0:
@@ -205,7 +208,6 @@ def simulate(
             # Rebalance once per UTC day; 90-day return ranks are cross-sectional.
             if (ts // ONE_DAY) != ((ts - FOUR_HOURS) // ONE_DAY):
                 scores = {}
-                eligible = set()
                 for symbol, (idx, bar) in current.items():
                     item = prepared[symbol]
                     if idx < 540 or not daily_regime(item["daily"], ts + FOUR_HOURS):
@@ -213,7 +215,6 @@ def simulate(
                     old = item["bars"][idx - 540][4]
                     if old > 0:
                         scores[symbol] = bar[4] / old - 1.0
-                        eligible.add(symbol)
                 leaders = set(sorted(scores, key=scores.get, reverse=True)[:2])
                 for symbol in prepared:
                     if symbol in positions and symbol not in leaders:
