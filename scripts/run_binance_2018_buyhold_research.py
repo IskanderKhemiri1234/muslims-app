@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import math
 import time
 from collections import defaultdict
 from datetime import date, datetime, timezone
@@ -234,7 +233,7 @@ def run() -> dict:
             for spread in SPREADS:
                 sim = engine.simulate(
                     prepared, strategy, RISK, spread, wf_start, last_ts,
-                    fold_days=FOLD_DAYS, btc_filter=use_filter, liquidate_at_end=True,
+                    fold_days=FOLD_DAYS, btc_filter=use_filter, liquidate_at_end=False,
                 )
                 trades, points = sim["trades"], sim["equity_curve"]
                 wf = summarize(trades, points, wf_start, holdout_start)
@@ -274,6 +273,7 @@ def run() -> dict:
                             ho_trades, lambda t: t.get("entry_btc_regime", "unknown")),
                     },
                     "yearly": annual,
+                    "open_positions_at_report_end": sim["open_positions"],
                     "concentration": {
                         "largest_year_share_of_positive_pnl": year_share,
                         "largest_symbol_share_of_positive_pnl": symbol_share,
