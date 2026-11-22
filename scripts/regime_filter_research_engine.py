@@ -6,16 +6,12 @@ The final locked-rule period is evaluated separately with fresh virtual capital.
 """
 from __future__ import annotations
 
-import argparse
 import bisect
-import json
 import math
 import time
 from collections import defaultdict
-from pathlib import Path
 from typing import Any
 
-import ccxt
 
 SYMBOLS = ["BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT", "ADA/USDT"]
 FOUR_HOURS = 14_400_000
@@ -50,14 +46,12 @@ def fetch_history(exchange: Any, symbol: str, timeframe: str, since_ms: int) -> 
     result = [rows[k] for k in sorted(rows) if k + duration <= now_ms]
     if len(result) < 2:
         raise ValueError(f"{symbol} {timeframe}: no usable public history ({len(result)})")
-    previous = None
     for row in result:
         ts, o, h, low, close, volume = row
         if int(ts) % duration or any(not math.isfinite(v) for v in row):
             raise ValueError(f"{symbol} {timeframe}: invalid timestamp/value")
         if min(o, h, low, close) <= 0 or volume < 0 or h < max(o, close, low) or low > min(o, close):
             raise ValueError(f"{symbol} {timeframe}: invalid OHLCV")
-        previous = int(ts)
     return result
 
 
@@ -219,7 +213,6 @@ def simulate(
             "exit_reason": reason, "bars_held": max(1, (ts - p["opened_at"]) // FOUR_HOURS),
             "entry_atr_pct": p["entry_atr"] / p["entry_fill"] * 100,
             "entry_btc_regime": p.get("entry_regime", "unknown"),
-            "entry_btc_regime": p.get("entry_regime", "unknown"),
         }
         trades.append(trade)
         if ts >= start_ms:
@@ -298,7 +291,7 @@ def simulate(
                     "entry_fee": notional * FEE_RATE,
                     "entry_execution_cost": abs(fill - bar[1]) * qty,
                     "raw_entry_price": bar[1], "opened_at": ts, "stop": bar[1] - stop_distance, "entry_atr": atr,
-                    "highest_close": bar[1], "entry_regime": btc_state, "entry_regime": btc_state,
+                    "highest_close": bar[1], "entry_regime": btc_state,
                 }
 
         # Stops are evaluated before updating trailing highs: no same-bar lookahead.
