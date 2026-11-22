@@ -59,3 +59,15 @@ def test_dashboard_token_compares_supplied_secret(monkeypatch):
     with pytest.raises(HTTPException) as error:
         api_module.require_dashboard_token("Bearer " + "b" * 40)
     assert error.value.status_code == 401
+
+def test_dashboard_status_exposes_configured_risk_profile(monkeypatch, tmp_path):
+    monkeypatch.setattr(api_module.settings, "state_path", tmp_path / "paper.json")
+    payload = api_module.status_payload()
+
+    assert payload["max_daily_loss_usdt"] == api_module.settings.max_daily_loss_usdt
+    assert payload["max_open_positions"] == api_module.settings.max_open_positions
+    assert payload["max_position_notional_usdt"] == api_module.settings.max_position_notional_usdt
+    assert payload["stop_loss_pct"] == api_module.settings.stop_loss_pct
+    assert payload["take_profit_pct"] == api_module.settings.take_profit_pct
+    assert payload["ema_fast"] == api_module.settings.ema_fast
+    assert payload["ema_slow"] == api_module.settings.ema_slow
