@@ -25,7 +25,7 @@ MAX_NOTIONAL = 20.0
 MAX_POSITIONS = 3
 FEE_RATE = 0.001
 SLIPPAGE_RATE = 0.0005
-STRATEGIES = ("donchian", "momentum", "pullback")
+STRATEGIES = ("donchian", "momentum")
 
 
 def fetch_history(exchange: Any, symbol: str, timeframe: str, since_ms: int) -> list[list[float]]:
@@ -48,8 +48,8 @@ def fetch_history(exchange: Any, symbol: str, timeframe: str, since_ms: int) -> 
         time.sleep(exchange.rateLimit / 1000)
     now_ms = int(time.time() * 1000)
     result = [rows[k] for k in sorted(rows) if k + duration <= now_ms]
-    if len(result) < 600:
-        raise ValueError(f"{symbol} {timeframe}: insufficient history ({len(result)})")
+    if len(result) < 2:
+        raise ValueError(f"{symbol} {timeframe}: no usable public history ({len(result)})")
     previous = None
     for row in result:
         ts, o, h, low, close, volume = row
@@ -57,8 +57,6 @@ def fetch_history(exchange: Any, symbol: str, timeframe: str, since_ms: int) -> 
             raise ValueError(f"{symbol} {timeframe}: invalid timestamp/value")
         if min(o, h, low, close) <= 0 or volume < 0 or h < max(o, close, low) or low > min(o, close):
             raise ValueError(f"{symbol} {timeframe}: invalid OHLCV")
-        if previous is not None and int(ts) - previous != duration:
-            raise ValueError(f"{symbol} {timeframe}: historical gap at {int(ts)}")
         previous = int(ts)
     return result
 
@@ -117,30 +115,39 @@ def rsi_values(values: list[float], period: int = 14) -> list[float]:
 def daily_regime(daily_timestamps: list[int], daily_closes: list[float],
                  daily_sma200: list[float], timestamp: int) -> bool:
     idx = bisect.bisect_right(daily_timestamps, timestamp - ONE_DAY) - 1
-    return idx >= 199 and daily_closes[idx] > daily_sma200[idx]
+    return idx >= 199 and math.isfinite(daily_sma200[idx]) and daily_closes[idx] > daily_sma200[idx]
 
 
 def indicators(data: dict[str, dict[str, list[list[float]]]]) -> dict[str, dict[str, Any]]:
     prepared = {}
     for symbol, series in data.items():
-        bars = series["4h"]
+        bars, daily = series["4h"], series["1d"]
         closes = [r[4] for r in bars]
+        daily_sma = [float("nan")] * len(daily)
+        ds = 0
+        for i in range(1, len(daily) + 1):
+            if i == len(daily) or int(daily[i][0]) - int(daily[i-1][0]) != ONE_DAY:
+                daily_sma[ds:i] = sma([r[4] for r in daily[ds:i]], 200)
+                ds = i
+        arrays = {k: [float("nan")] * len(bars) for k in ("atr","ema20","ema50","ema200","rsi")}
+        start = 0
+        for i in range(1, len(bars) + 1):
+            if i == len(bars) or int(bars[i][0]) - int(bars[i-1][0]) != FOUR_HOURS:
+                chunk, values = bars[start:i], closes[start:i]
+                arrays["atr"][start:i] = atr_values(chunk)
+                arrays["ema20"][start:i] = ema(values, 20)
+                arrays["ema50"][start:i] = ema(values, 50)
+                arrays["ema200"][start:i] = ema(values, 200)
+                arrays["rsi"][start:i] = rsi_values(values, 14)
+                start = i
         prepared[symbol] = {
-            "bars": bars,
-            "daily": series["1d"],
-            "daily_timestamps": [int(r[0]) for r in series["1d"]],
-            "daily_closes": [r[4] for r in series["1d"]],
-            "daily_sma200": sma([r[4] for r in series["1d"]], 200),
+            "bars": bars, "daily": daily,
+            "daily_timestamps": [int(r[0]) for r in daily],
+            "daily_closes": [r[4] for r in daily], "daily_sma200": daily_sma,
             "index": {int(r[0]): i for i, r in enumerate(bars)},
-            "atr": atr_values(bars),
-            "ema20": ema(closes, 20),
-            "ema50": ema(closes, 50),
-            "ema200": ema(closes, 200),
-            "rsi": rsi_values(closes, 14),
-            "pending": None,
+            **arrays, "pending": None,
         }
     return prepared
-
 
 def metric_summary(trades: list[dict[str, Any]], max_dd: float, start_equity: float,
                    end_equity: float) -> dict[str, Any]:
