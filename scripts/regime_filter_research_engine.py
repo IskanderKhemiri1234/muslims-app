@@ -259,7 +259,7 @@ def simulate(
         btc_on = bool(btc_item and daily_regime(
             btc_item["daily_timestamps"], btc_item["daily_closes"],
             btc_item["daily_sma200"], ts + FOUR_HOURS))
-        btc_idx = bisect.bisect_right(btc_item["daily_timestamps"], ts) - 1 if btc_item else -1
+        btc_idx = bisect.bisect_right(btc_item["daily_timestamps"], ts + FOUR_HOURS - ONE_DAY) - 1 if btc_item else -1
         btc_state = "unknown"
         if btc_idx >= 0 and math.isfinite(btc_item["daily_sma200"][btc_idx]):
             ratio = btc_item["daily_closes"][btc_idx] / btc_item["daily_sma200"][btc_idx]
@@ -352,7 +352,7 @@ def simulate(
         drawdown = peak - min(equity, adverse_equity)
         max_dd = max(max_dd, drawdown)
         if ts >= start_ms:
-            equity_curve.append({"timestamp": ts, "equity": equity, "drawdown": drawdown})
+            equity_curve.append({"timestamp": ts, "equity": equity, "adverse_equity": adverse_equity, "drawdown": drawdown})
             fold_points[fold_id(ts)].append(equity)
 
     # Historical batch reports liquidate at the endpoint; forward replay keeps positions open
