@@ -54,7 +54,8 @@ def test_rejects_non_finite_values():
 def test_rejects_stale_market_data():
     now_ms = 1_800_000_000_000
     rows = _candles(now_ms)
-    rows[-1][0] -= 3 * 900_000
+    for row in rows:
+        row[0] -= 3 * 900_000
     with pytest.raises(MarketDataIntegrityError, match="stale_market_data"):
         validate_ohlcv_candles(rows, "15m", now_ms=now_ms)
 
