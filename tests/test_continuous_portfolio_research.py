@@ -55,6 +55,8 @@ def test_atr_and_rsi_return_finite_values_after_warmup() -> None:
 def test_trade_diagnostics_include_commission_spread_and_slippage() -> None:
     trade = {
         "symbol": "BTC/USDT",
+        "opened_at": 1_700_000_000_000,
+        "closed_at": 1_700_259_200_000,
         "exit_reason": "atr_stop",
         "net_pnl_usdt": -0.2,
         "gross_pnl_usdt": 0.1,
