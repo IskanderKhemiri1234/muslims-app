@@ -26,6 +26,8 @@ def _evaluate(fifteen, hourly, **overrides):
         "take_profit_pct": 4.0,
         "taker_fee_rate": 0.001,
         "slippage_rate": 0.0005,
+        "spread_pct": 0.05,
+        "max_spread_pct": 0.15,
     }
     values.update(overrides)
     return evaluate_long_candidate(fifteen, hourly, **values)
@@ -58,6 +60,13 @@ def test_rejects_chasing_price_far_above_entry_area():
     result = _evaluate(fifteen, hourly, entry_price=150.0)
     assert not result.accepted
     assert "entry_too_far_from_ema20_atr" in result.reasons
+
+
+def test_rejects_excessive_bid_ask_spread():
+    fifteen, hourly = _candidate_inputs()
+    result = _evaluate(fifteen, hourly, spread_pct=0.30)
+    assert not result.accepted
+    assert "bid_ask_spread_exceeds_liquidity_limit" in result.reasons
 
 
 def test_rejects_costs_that_destroy_net_reward_risk():
