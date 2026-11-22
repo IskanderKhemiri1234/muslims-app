@@ -201,7 +201,7 @@ function renderRiskProfile(status){
  host.replaceChildren(fragment);
 }
 function renderStatus(status,health){
- $("capital").innerHTML="";const amount=document.createElement("span");amount.textContent=money(status.virtual_capital_usdt,2).replace(" USDT","");const unit=document.createElement("span");unit.textContent=" USDT";$("capital").append(amount,unit);
+ $("capital").replaceChildren();const amount=document.createElement("span");amount.textContent=money(status.virtual_capital_usdt,2).replace(" USDT","");const unit=document.createElement("span");unit.textContent=" USDT";$("capital").append(amount,unit);
  const daily=Number(status.daily_pnl_usdt||0),total=Number(status.total_realized_pnl_usdt||0);
  $("daily").textContent=signedMoney(daily);$("total").textContent=signedMoney(total);
  $("daily").className="value "+(daily>0?"positive":daily<0?"negative":"");$("total").className="value "+(total>0?"positive":total<0?"negative":"");
