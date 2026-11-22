@@ -96,6 +96,7 @@ def yearly_report(trades: list[dict], points: list[dict]) -> dict:
 
 def run() -> dict:
     exchange = ccxt.okx({"enableRateLimit": True, "timeout": 30000})
+    exchange.load_markets()
     since = exchange.parse8601("2018-01-01T00:00:00Z")
     data = {}
     for symbol in engine.SYMBOLS:
