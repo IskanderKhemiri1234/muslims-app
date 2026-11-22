@@ -194,7 +194,7 @@ def simulate(
         execution_adjusted_gross = (exit_fill - p["entry_fill"]) * p["qty"]
         gross = (raw_exit - p["raw_entry_price"]) * p["qty"]
         fees = p["entry_fee"] + exit_fee
-        net = gross - fees
+        net = execution_adjusted_gross - fees
         realized += net
         exit_execution_cost = abs(raw_exit - exit_fill) * p["qty"]
         trade = {
