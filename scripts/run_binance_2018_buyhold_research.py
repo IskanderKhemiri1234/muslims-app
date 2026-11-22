@@ -75,20 +75,21 @@ def curve_metrics(points: list[dict], start_ms: int, end_ms: int) -> dict:
     end_equity = float(points[-1]["equity"])
     peak = start_equity
     max_dd = 0.0
-    max_peak = start_equity
+    max_dd_pct = 0.0
     for point in points:
         peak = max(peak, float(point["equity"]))
-        max_peak = max(max_peak, peak)
-        max_dd = max(max_dd, peak - float(point.get("adverse_equity", point["equity"])))
+        drawdown = max(0.0, peak - float(point.get("adverse_equity", point["equity"])))
+        max_dd = max(max_dd, drawdown)
+        if peak > 0:
+            max_dd_pct = max(max_dd_pct, drawdown / peak)
     days = max(1.0, (end_ms - start_ms) / 86_400_000)
     total_return = end_equity / start_equity - 1.0
     cagr = (end_equity / start_equity) ** (365.25 / days) - 1.0 if end_equity > 0 else -1.0
-    dd_pct = max_dd / max_peak if max_peak else 0.0
     return {
         "start_equity_usdt": start_equity, "end_equity_usdt": end_equity,
         "total_return_pct": total_return * 100,
-        "max_drawdown_usdt": max_dd, "max_drawdown_pct": dd_pct * 100,
-        "cagr_pct": cagr * 100, "calmar": cagr / dd_pct if dd_pct > 0 else None,
+        "max_drawdown_usdt": max_dd, "max_drawdown_pct": max_dd_pct * 100,
+        "cagr_pct": cagr * 100, "calmar": cagr / max_dd_pct if max_dd_pct > 0 else None,
     }
 
 
@@ -410,7 +411,7 @@ def run() -> dict:
             "holdout": {"days": HOLDOUT_DAYS, "final_period": True, "reset": False},
         },
         "benchmarks": {
-            "definition": "70 USDT initially allocated equally in dollar terms; each market is bought at its first available 4h open on/after the common evaluation start, so a not-yet-listed market's allocation remains cash until its first candle. Holdings are not rebalanced or sold.",
+            "definition": "70 USDT initially allocated equally in dollar terms; each market is bought at its first available 4h open on/after the common evaluation start, so a not-yet-listed market's allocation remains cash until its first candle. Holdings are not rebalanced or sold. Valuation uses observed closes and intrabar lows only; between asynchronous symbol timestamps the last observed price is carried for portfolio valuation, without creating candle rows.",
             "costs": "Entry only: 0.10% commission, 0.05% slippage and half of the scenario round-trip spread. No exit cost is charged because the benchmark remains Buy & Hold.",
             "same_evaluation_period": {
                 "start_utc": datetime.fromtimestamp(wf_start / 1000, UTC).isoformat(),
