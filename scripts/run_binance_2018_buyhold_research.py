@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import bisect
 import json
+import math
 import time
 from collections import defaultdict
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 import regime_filter_research_engine as engine
@@ -177,11 +178,9 @@ def buy_and_hold(data: dict, start_ms: int, end_ms: int, spread_pct: float,
     points = []
     entries = {}
     for ts in timeline:
-        current = {}
         for symbol in symbols:
             row = by_symbol[symbol].get(ts)
             if row is not None:
-                current[symbol] = row
                 last_close[symbol] = float(row[4])
                 if symbol not in holdings:
                     target_notional = allocation / (1 + fee)
