@@ -33,6 +33,7 @@ DAY_MS = 86_400_000
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--since", default="2024-01-01", help="UTC start date (YYYY-MM-DD)")
+    parser.add_argument("--exchange", default="binance", help="CCXT public OHLCV provider, e.g. binance or okx")
     parser.add_argument("--symbols", default=",".join(DEFAULT_SYMBOLS))
     parser.add_argument("--holdout-days", type=int, default=90)
     parser.add_argument("--walk-forward-days", type=int, default=30)
@@ -156,7 +157,10 @@ def main() -> None:
             import ccxt
         except ImportError as exc:
             raise SystemExit('Install project dependencies first: pip install -e ".[dev]"') from exc
-        exchange = ccxt.binance({"enableRateLimit": True})
+        exchange_factory = getattr(ccxt, args.exchange, None)
+        if exchange_factory is None:
+            raise SystemExit(f"Unsupported CCXT exchange id: {args.exchange}")
+        exchange = exchange_factory({"enableRateLimit": True})
         exchange.load_markets()
     else:
         exchange = None
@@ -236,6 +240,7 @@ def main() -> None:
     report = {
         "generated_at_utc": datetime.now(UTC).isoformat(),
         "markets": list(symbols),
+        "historical_data_provider": args.exchange,
         "data_start_utc": _iso(first_timestamp),
         "data_end_utc": _iso(last_timestamp),
         "validation_design": {
