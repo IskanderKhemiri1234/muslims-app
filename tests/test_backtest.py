@@ -4,6 +4,7 @@ import pytest
 
 from iskander_trade.backtest import BacktestConfig, compare_strategies, run_ema_backtest
 from iskander_trade.selection import SelectionDecision
+from scripts.run_backtest import _aggregate_15m_to_1h
 
 
 def _rows(closes: list[float], duration_ms: int) -> list[list[float]]:
@@ -167,3 +168,19 @@ def test_ambiguous_intrabar_bar_assumes_stop_before_target_and_net_pnl_reconcile
     assert result["summary"]["net_pnl_usdt"] == pytest.approx(
         sum(trade["net_pnl_usdt"] for trade in result["trades"])
     )
+
+
+
+def test_hourly_context_aggregation_uses_only_complete_four_candle_groups():
+    fifteen = _rows([10.0, 11.0, 10.5, 12.0, 13.0], 900_000)
+
+    hourly = _aggregate_15m_to_1h(fifteen)
+
+    assert hourly == [[
+        0.0,
+        10.0,
+        12.1,
+        9.9,
+        12.0,
+        400.0,
+    ]]
