@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from iskander_trade.backtest import BacktestConfig, compare_strategies, run_ema_backtest
+from iskander_trade.selection import SelectionDecision
 
 
 def _rows(closes: list[float], duration_ms: int) -> list[list[float]]:
@@ -113,3 +114,37 @@ def test_shared_daily_loss_guard_blocks_new_entries_after_realized_limit():
 
     assert result["summary"]["trades"] == 1
     assert result["summary"]["daily_loss_rejections"] == 1
+
+
+
+def test_screening_uses_actual_next_open_price(monkeypatch):
+    closes = [10.0] * 50 + [12.0, 16.0] + [16.0] * 8
+    fifteen = _rows(closes, 900_000)
+    # Force a large but valid gap between the crossover close and next open.
+    fifteen[51][1] = 20.0
+    fifteen[51][2] = 20.0
+    fifteen[51][3] = 15.0
+    fifteen[51][4] = 16.0
+    hourly = _rows([10.0 + index * 0.01 for index in range(60)], 3_600_000)
+    captured = []
+
+    def accept_candidate(*args, **kwargs):
+        captured.append(kwargs["entry_price"])
+        return SelectionDecision(True, "trend_up", (), {})
+
+    monkeypatch.setattr("iskander_trade.backtest.evaluate_long_candidate", accept_candidate)
+    run_ema_backtest(
+        {"BTC/USDT": {"15m": fifteen, "1h": hourly}},
+        screened=True,
+        config=_config(),
+    )
+
+    assert captured == [20.0]
+
+
+def test_backtest_rejects_missing_historical_candle_intervals():
+    datasets = _datasets()
+    datasets["BTC/USDT"]["15m"][4][0] += 900_000
+
+    with pytest.raises(ValueError, match="missing_candle_gap"):
+        run_ema_backtest(datasets, screened=False, config=_config())
