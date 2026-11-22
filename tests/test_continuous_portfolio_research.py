@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import math
 from pathlib import Path
 
 import pytest
@@ -16,9 +17,7 @@ def test_sma_and_ema_are_causal_and_seeded_after_full_window() -> None:
     values = [float(i) for i in range(1, 8)]
     simple = research.sma(values, 3)
     exponential = research.ema(values, 3)
-    assert simple[:2] == [pytest.approx(float("nan"))] * 2 or all(
-        value != value for value in simple[:2]
-    )
+    assert all(math.isnan(value) for value in simple[:2])
     assert simple[2] == pytest.approx(2.0)
     assert exponential[1] != exponential[1]
     assert exponential[2] == pytest.approx(2.0)
