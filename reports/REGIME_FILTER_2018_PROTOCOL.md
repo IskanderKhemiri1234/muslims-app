@@ -17,17 +17,17 @@
 
 ## Immutable strategy rules
 
-1. **Donchian Breakout:** enter at next 4h open after a completed 4h close breaks above the previous 55 completed 4h-bar highs; exit at next open after a completed close breaks below the previous 20 completed 4h-bar lows; initial stop 3 × ATR(14).
-2. **Cross-sectional Momentum:** rank available symbols by trailing 90-day return (540 consecutive 4h candles); hold the top two, rebalance daily; exit when a symbol leaves the top two; initial stop 3 × ATR(14).
+1. **Donchian Breakout:** preserve the existing per-asset completed-daily close>SMA200 eligibility gate; enter at next 4h open after a completed 4h close breaks above the previous 55 completed 4h-bar highs; exit at next open after a completed close breaks below the previous 20 completed 4h-bar lows or the asset daily regime fails; initial stop 3 × ATR(14).
+2. **Cross-sectional Momentum:** preserve the existing per-asset completed-daily close>SMA200 eligibility gate; rank eligible symbols by trailing 90-day return (540 consecutive 4h candles); hold the top two, rebalance daily; exit when a symbol leaves the eligible top two; initial stop 3 × ATR(14).
 
-No per-asset SMA200 gate is applied to either baseline strategy. The only filter experiment is the global BTC regime gate below.
+The original per-asset SMA200 eligibility/exit rules remain unchanged in both paired versions. The only additional filter experiment is the global BTC regime gate below.
 
 ## One-time BTC filter comparison
 
 Each strategy is run in paired versions with identical sizing, signals, costs and risk:
 
 - **Without filter:** no BTC SMA gate.
-- **With filter:** a new position may be opened only if the last completed BTC daily close is strictly above its daily SMA200. If BTC falls below the SMA200, no new positions are opened. Existing positions remain open and exit only under their ordinary strategy exit or stop rules.
+- **With filter:** in addition to each strategy’s original per-asset rules, a new position may be opened only if the last completed BTC daily close is strictly above its daily SMA200. If BTC falls below the SMA200, no new positions are opened. Existing positions remain open and exit only under their ordinary per-asset strategy exit or stop rules.
 
 SMA200 is fixed. No threshold, period, market, stop, ranking horizon or other parameter may be adjusted after viewing these results.
 
