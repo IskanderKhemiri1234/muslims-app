@@ -49,10 +49,10 @@ def train_research_model(closes: Sequence[float]) -> ModelReport:
     if len(x) < 40 or len(np.unique(y)) < 2:
         raise ValueError("Insufficient directional diversity for model evaluation.")
     model = RandomForestClassifier(
-        n_estimators=250, max_depth=5, min_samples_leaf=8,
-        class_weight="balanced_subsample", random_state=42, n_jobs=-1,
+        n_estimators=100, max_depth=5, min_samples_leaf=8,
+        class_weight="balanced_subsample", random_state=42, n_jobs=1,
     )
-    scores = cross_val_score(model, x, y, cv=TimeSeriesSplit(n_splits=4), scoring="accuracy")
+    scores = cross_val_score(model, x, y, cv=TimeSeriesSplit(n_splits=4), scoring="accuracy", n_jobs=1)
     baseline = max(float(np.mean(y)), 1.0 - float(np.mean(y)))
     model.fit(x, y)
     return ModelReport(

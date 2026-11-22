@@ -28,3 +28,10 @@ def test_daily_loss_limit_blocks_new_positions():
 def test_open_position_limit_blocks_new_positions():
     result = _size(open_positions=3)
     assert not result.allowed
+
+
+def test_position_size_accounts_for_round_trip_costs():
+    without_costs = _size()
+    with_costs = _size(cost_pct=0.3)
+    assert with_costs.allowed
+    assert with_costs.notional_usdt < without_costs.notional_usdt

@@ -2,9 +2,9 @@ name: Iskander AI Trade CI
 
 on:
   push:
-    branches: [main, foundation]
+    branches: [main, foundation, "feature/**"]
   pull_request:
-    branches: [main]
+    branches: [main, foundation]
   workflow_dispatch:
 
 jobs:
@@ -23,5 +23,7 @@ jobs:
           pip install -e ".[dev]"
       - name: Run tests
         run: pytest -q
+      - name: Check lean API import memory
+        run: python scripts/check_memory.py
       - name: Lint
-        run: ruff check src tests
+        run: ruff check src tests scripts
