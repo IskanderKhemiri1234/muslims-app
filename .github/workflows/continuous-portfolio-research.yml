@@ -1,0 +1,50 @@
+name: Iskander Continuous Portfolio Research V2
+
+on:
+  push:
+    branches: [research/portfolio-walkforward-v2]
+    paths:
+      - "scripts/run_continuous_portfolio_research.py"
+      - "tests/test_continuous_portfolio_research.py"
+      - ".github/workflows/continuous-portfolio-research.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  continuous-research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout isolated research branch
+        uses: actions/checkout@v4
+        with:
+          ref: research/portfolio-walkforward-v2
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install project and test tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Run research unit tests and lint
+        run: |
+          pytest -q tests/test_continuous_portfolio_research.py
+          ruff check scripts/run_continuous_portfolio_research.py tests/test_continuous_portfolio_research.py
+      - name: Download public candles and run locked-rule research
+        run: |
+          python scripts/run_continuous_portfolio_research.py \
+            --exchange okx \
+            --since 2023-01-01 \
+            --spread-values 0.05,0.10,0.15
+      - name: Upload continuous portfolio report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iskander-continuous-portfolio-research-v2
+          path: reports/continuous_portfolio_research.json
+          if-no-files-found: warn
+          retention-days: 30
