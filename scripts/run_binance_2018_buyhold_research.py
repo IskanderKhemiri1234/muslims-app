@@ -11,7 +11,11 @@ from pathlib import Path
 
 import regime_filter_research_engine as engine
 from binance_vision_data import (
-    ArchiveUnavailable, SYMBOLS, fetch_market_history, gap_count, probe_source,
+    SYMBOLS,
+    ArchiveUnavailable,
+    fetch_market_history,
+    gap_count,
+    probe_source,
 )
 
 START_MS = int(datetime(2018, 1, 1, tzinfo=UTC).timestamp() * 1000)
