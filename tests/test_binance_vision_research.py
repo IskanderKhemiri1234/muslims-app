@@ -3,7 +3,6 @@ from __future__ import annotations
 import importlib.util
 import sys
 import types
-from datetime import date
 from pathlib import Path
 
 import pytest
@@ -75,7 +74,7 @@ def test_missing_candles_are_counted_not_filled():
 
 def test_daily_btc_filter_uses_only_last_completed_daily_candle():
     timestamps = [i * engine.ONE_DAY for i in range(205)]
-    closes = [100.0] * 200 + [101.0] * 5
+    closes = [100.0] * 199 + [101.0] * 6
     averages = engine.sma(closes, 200)
     # At day 200 + 4h, the day-200 candle is still in progress.
     evaluation_time = 200 * engine.ONE_DAY + engine.FOUR_HOURS
@@ -126,7 +125,7 @@ def test_momentum_ranking_has_no_future_bar_leakage():
     assert original["open_positions"] == altered["open_positions"]
 
 
-def test_buy_and_hold_entry_costs_are_charged_once(monkeypatch):
+def test_buy_and_hold_entry_costs_are_charged_once():
     import importlib.util
 
     runner_spec = importlib.util.spec_from_file_location(
