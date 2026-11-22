@@ -155,8 +155,8 @@ def run() -> dict:
         if result["round_trip_spread_pct"] != 0.10:
             continue
         wf, ho = result["walk_forward"], result["holdout"]
-        year_share = result["concentration"]["largest_year_share_of_positive_trade_pnl"]
-        symbol_share = result["concentration"]["largest_symbol_share_of_positive_trade_pnl"]
+        year_share = result["concentration"]["largest_year_share_of_positive_net_pnl"]
+        symbol_share = result["concentration"]["largest_symbol_share_of_positive_net_pnl"]
         passed = {
             "walk_forward_at_least_100_trades": wf["trades"] >= 100,
             "positive_expectancy_walk_forward": wf["expectancy_usdt_per_trade"] > 0,
