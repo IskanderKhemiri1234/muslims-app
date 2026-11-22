@@ -219,6 +219,7 @@ def simulate(
             "exit_reason": reason, "bars_held": max(1, (ts - p["opened_at"]) // FOUR_HOURS),
             "entry_atr_pct": p["entry_atr"] / p["entry_fill"] * 100,
             "entry_btc_regime": p.get("entry_regime", "unknown"),
+            "entry_btc_regime": p.get("entry_regime", "unknown"),
         }
         trades.append(trade)
         if ts >= start_ms:
@@ -295,7 +296,7 @@ def simulate(
                     "entry_fee": notional * FEE_RATE,
                     "entry_execution_cost": abs(fill - bar[1]) * qty,
                     "raw_entry_price": bar[1], "opened_at": ts, "stop": bar[1] - stop_distance, "entry_atr": atr,
-                    "highest_close": bar[1], "entry_regime": btc_state,
+                    "highest_close": bar[1], "entry_regime": btc_state, "entry_regime": btc_state,
                 }
 
         # Stops are evaluated before updating trailing highs: no same-bar lookahead.
