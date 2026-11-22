@@ -26,7 +26,7 @@ def get_json(base_url: str, path: str, token: str | None = None) -> dict:
     with urlopen(request, timeout=20) as response:
         payload = json.loads(response.read().decode("utf-8"))
     if not isinstance(payload, dict):
-        raise RuntimeError(f"{path} did not return a JSON object.")
+        raise TypeError(f"{path} did not return a JSON object.")
     return payload
 
 
