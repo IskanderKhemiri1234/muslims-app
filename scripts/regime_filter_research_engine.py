@@ -322,7 +322,7 @@ def simulate(
                     elif symbol not in positions and bar[4] > high and (not btc_filter or btc_on):
                         x["pending"] = "buy"
             elif strategy == "momentum":
-                if ts // ONE_DAY != (ts - FOUR_HOURS) // ONE_DAY:
+                if (ts + FOUR_HOURS) // ONE_DAY != ts // ONE_DAY:
                     scores = {}
                     for symbol, (idx, bar) in current.items():
                         x = prepared[symbol]
