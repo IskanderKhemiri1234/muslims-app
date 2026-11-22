@@ -312,16 +312,22 @@ def simulate(
                         continue
                     high = max(r[2] for r in x["bars"][idx-55:idx])
                     low = min(r[3] for r in x["bars"][idx-20:idx])
-                    if symbol in positions and bar[4] < low:
+                    asset_regime = daily_regime(
+                        x["daily_timestamps"], x["daily_closes"],
+                        x["daily_sma200"], ts + FOUR_HOURS)
+                    if symbol in positions and (not asset_regime or bar[4] < low):
                         x["pending"] = "sell"
-                    elif symbol not in positions and bar[4] > high and (not btc_filter or btc_on):
+                    elif (symbol not in positions and asset_regime and bar[4] > high
+                          and (not btc_filter or btc_on)):
                         x["pending"] = "buy"
             elif strategy == "momentum":
                 if (ts + FOUR_HOURS) // ONE_DAY != ts // ONE_DAY:
                     scores = {}
                     for symbol, (idx, bar) in current.items():
                         x = prepared[symbol]
-                        if idx < 540 or int(bar[0]) - int(x["bars"][idx-540][0]) != 540 * FOUR_HOURS:
+                        if (idx < 540 or int(bar[0]) - int(x["bars"][idx-540][0]) != 540 * FOUR_HOURS
+                                or not daily_regime(x["daily_timestamps"], x["daily_closes"],
+                                                    x["daily_sma200"], ts + FOUR_HOURS)):
                             continue
                         old = x["bars"][idx - 540][4]
                         if old > 0:
