@@ -1,6 +1,18 @@
 from __future__ import annotations
 
-from scripts.run_trend_research import ONE_DAY, atr_values, daily_regime, metrics
+import importlib.util
+from pathlib import Path
+
+_SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "run_trend_research.py"
+_SPEC = importlib.util.spec_from_file_location("trend_research", _SCRIPT)
+assert _SPEC is not None and _SPEC.loader is not None
+_MODULE = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(_MODULE)
+
+ONE_DAY = _MODULE.ONE_DAY
+atr_values = _MODULE.atr_values
+daily_regime = _MODULE.daily_regime
+metrics = _MODULE.metrics
 
 
 def _daily(count: int = 200) -> list[list[float]]:
