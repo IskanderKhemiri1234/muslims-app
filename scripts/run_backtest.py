@@ -13,13 +13,13 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import math
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parents[1]
 from iskander_trade.backtest import BacktestConfig, compare_strategies
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 DEFAULT_SYMBOLS = (
@@ -234,7 +234,7 @@ def main() -> None:
         evaluation_end_ms=last_timestamp,
     )
     report = {
-        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "generated_at_utc": datetime.now(UTC).isoformat(),
         "markets": list(symbols),
         "data_start_utc": _iso(first_timestamp),
         "data_end_utc": _iso(last_timestamp),
