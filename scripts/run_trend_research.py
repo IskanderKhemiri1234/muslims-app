@@ -223,7 +223,15 @@ def simulate(
         else:
             raise ValueError(f"Unknown strategy: {strategy}")
 
-        equity = INITIAL_CAPITAL + realized
+        unrealized = 0.0
+        for symbol, position in positions.items():
+            row = current.get(symbol)
+            if row is None:
+                continue
+            mark = row[1][4] * (1 - SLIPPAGE_RATE - spread_pct / 200.0)
+            exit_fee = mark * position["qty"] * FEE_RATE
+            unrealized += (mark - position["entry_fill"]) * position["qty"] - position["entry_fee"] - exit_fee
+        equity = INITIAL_CAPITAL + realized + unrealized
         peak = max(peak, equity)
         max_dd = max(max_dd, peak - equity)
 
@@ -231,6 +239,9 @@ def simulate(
         row = last_rows.get(symbol)
         if row:
             close(symbol, row[4], int(row[0]), "end_of_window")
+    final_equity = INITIAL_CAPITAL + realized
+    peak = max(peak, final_equity)
+    max_dd = max(max_dd, peak - final_equity)
     return {"summary": metrics(trades, max_dd), "trades": trades}
 
 
@@ -248,19 +259,20 @@ def run_report(data: dict[str, dict[str, list[list[float]]]], since_ms: int,
                 cursor = wf_start
                 while cursor < holdout_start:
                     end = min(cursor + 30 * ONE_DAY, holdout_start)
-                    folds.append(simulate(data, strategy, risk, spread, cursor, end)["trades"])
+                    folds.append(simulate(data, strategy, risk, spread, cursor, end))
                     cursor = end
-                wf_trades = [t for fold in folds for t in fold]
+                wf_trades = [t for fold in folds for t in fold["trades"]]
+                wf_max_dd = max((fold["summary"]["max_drawdown_usdt"] for fold in folds), default=0.0)
                 holdout = simulate(data, strategy, risk, spread, holdout_start, last_ts)
                 scenarios[f"{strategy}|risk={risk:.3f}|spread={spread:.2f}"] = {
                     "strategy": strategy, "risk_fraction": risk, "spread_round_trip_pct": spread,
-                    "walk_forward": metrics(wf_trades, 0.0),
-                    "walk_forward_folds": [metrics(f, 0.0) for f in folds],
+                    "walk_forward": metrics(wf_trades, wf_max_dd),
+                    "walk_forward_folds": [fold["summary"] for fold in folds],
                     "holdout": holdout["summary"],
                     "acceptance": {
                         "walk_forward_min_100_trades": len(wf_trades) >= 100,
                         "holdout_min_100_trades": len(holdout["trades"]) >= 100,
-                        "walk_forward_positive_expectancy": metrics(wf_trades, 0.0)["expectancy_usdt_per_trade"] > 0,
+                        "walk_forward_positive_expectancy": metrics(wf_trades, wf_max_dd)["expectancy_usdt_per_trade"] > 0,
                         "holdout_positive_expectancy": holdout["summary"]["expectancy_usdt_per_trade"] > 0,
                     },
                 }
