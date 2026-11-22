@@ -125,7 +125,7 @@ class PaperTradingEngine:
         except Exception:
             log.exception("Selection inputs unavailable for %s", symbol)
             selection = SelectionDecision(
-                False, "unavailable", ("higher_timeframe_data_unavailable",),
+                False, "unavailable", ("selection_inputs_unavailable",),
                 {},
             )
         if not selection.accepted:
