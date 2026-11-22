@@ -44,9 +44,8 @@ def test_only_two_frozen_strategies_are_enabled():
 def test_missing_candles_are_preserved_and_indicators_reset():
     data, base = _synthetic_data()
     rows = data["ETH/USDT"]["4h"]
-    rows.insert(10, [rows[10][0] + engine.FOUR_HOURS, 100, 101, 99, 100, 100])
-    # Deliberately create a two-candle timestamp jump; no filler candles are inserted.
-    rows[11][0] += engine.FOUR_HOURS
+    # Remove a real candle to create a gap; no synthetic row is inserted.
+    rows.pop(10)
     prepared = engine.indicators(data)
     idx = prepared["ETH/USDT"]["index"][int(rows[11][0])]
     assert prepared["ETH/USDT"]["ema200"][idx] != prepared["ETH/USDT"]["ema200"][idx]
