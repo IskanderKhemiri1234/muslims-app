@@ -11,6 +11,7 @@ import pytest
 sys.modules.setdefault("ccxt", types.ModuleType("ccxt"))
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
 ENGINE_SPEC = importlib.util.spec_from_file_location(
     "binance_research_engine_test", ROOT / "scripts" / "regime_filter_research_engine.py"
 )
@@ -120,7 +121,7 @@ def test_momentum_ranking_has_no_future_bar_leakage():
         engine.indicators(changed_future), "momentum", 0.005, 0.10, start, end,
         btc_filter=False, liquidate_at_end=False,
     )
-    assert original["trades"]
+    assert original["open_positions"]
     assert original["trades"] == altered["trades"]
     assert original["open_positions"] == altered["open_positions"]
 
