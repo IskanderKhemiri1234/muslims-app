@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
