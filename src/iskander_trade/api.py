@@ -138,6 +138,7 @@ def status_payload() -> dict[str, Any]:
         "context_timeframe": settings.context_timeframe,
         "taker_fee_rate": settings.taker_fee_rate,
         "slippage_rate": settings.slippage_rate,
+        "max_spread_pct": settings.max_spread_pct,
         "virtual_capital_usdt": settings.virtual_capital_usdt,
         "risk_per_trade_usdt": settings.risk_per_trade_usdt,
         "max_daily_loss_usdt": settings.max_daily_loss_usdt,
