@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import math
 import time
-from collections.abc import Sequence
 
 
 _TIMEFRAME_MS = {
