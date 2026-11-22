@@ -6,9 +6,10 @@ import io
 import urllib.error
 import urllib.request
 import zipfile
+from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date, datetime, timedelta, timezone
-from typing import Iterable
+from datetime import UTC, date, datetime, timedelta
+from itertools import pairwise
 
 BASE = "https://data.binance.vision/data/spot"
 SYMBOLS = {
@@ -138,13 +139,13 @@ def fetch_market_history(symbol: str, today_utc: date) -> dict[str, list[list[fl
     with ThreadPoolExecutor(max_workers=12) as pool:
         futures = [pool.submit(_fetch_one, job) for job in jobs]
         for future in as_completed(futures):
-            market, interval, period, rows = future.result()
+            _market, interval, period, rows = future.result()
             if rows is None:
                 missing_archives[interval].append(period.isoformat())
                 continue
             for row in rows:
                 collected[interval][int(row[0])] = row
-    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    now_ms = int(datetime.now(UTC).timestamp() * 1000)
     result = {}
     for interval, duration in INTERVAL_MS.items():
         result[interval] = [
@@ -161,4 +162,4 @@ def fetch_market_history(symbol: str, today_utc: date) -> dict[str, list[list[fl
 
 
 def gap_count(rows: list[list[float]], duration: int) -> int:
-    return sum(1 for left, right in zip(rows, rows[1:]) if int(right[0]) - int(left[0]) != duration)
+    return sum(1 for left, right in pairwise(rows) if int(right[0]) - int(left[0]) != duration)
