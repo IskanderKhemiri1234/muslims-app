@@ -239,7 +239,9 @@ def main() -> None:
     report = run()
     accepted = sum(1 for value in report["acceptance_decisions_at_0_10_spread_only"].values()
                    if value["accepted"])
-    report["overall_result"] = "PASS" if accepted else "NO_GO"
+    total = len(report["acceptance_decisions_at_0_10_spread_only"])
+    report["overall_result"] = ("PASS" if accepted == total else
+                                ("PARTIAL_PASS" if accepted else "NO_GO"))
     Path("reports").mkdir(exist_ok=True)
     Path("reports/regime_filter_2018_research.json").write_text(
         json.dumps(report, indent=2, allow_nan=False), encoding="utf-8")
