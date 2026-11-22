@@ -66,6 +66,8 @@ def _validate_rows(rows: list[list[float]], duration_ms: int, symbol: str) -> No
             raise ValueError(f"{symbol}: invalid candle timestamp at {index}")
         if int(timestamp) <= previous:
             raise ValueError(f"{symbol}: duplicate/out-of-order candle at {index}")
+        if previous >= 0 and int(timestamp) - previous != duration_ms:
+            raise ValueError(f"{symbol}: missing_candle_gap at {index}")
         if min(open_, high, low, close) <= 0 or volume < 0:
             raise ValueError(f"{symbol}: invalid price/volume at {index}")
         if high < max(open_, close, low) or low > min(open_, close):
@@ -214,7 +216,10 @@ def run_ema_backtest(
                     1.0 + cfg.slippage_rate + spread_fraction / 2.0
                 )
                 open_notional = sum(p["notional"] for p in positions.values())
-                available = max(0.0, cfg.initial_capital_usdt + realized_pnl - open_notional)
+                open_fees = sum(p["entry_fee"] for p in positions.values())
+                available = max(
+                    0.0, cfg.initial_capital_usdt + realized_pnl - open_notional - open_fees
+                )
                 round_trip_cost_pct = (
                     2.0 * (cfg.taker_fee_rate + cfg.slippage_rate) * 100.0
                     + cfg.assumed_spread_pct
