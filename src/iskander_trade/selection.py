@@ -83,6 +83,8 @@ def evaluate_long_candidate(
     take_profit_pct: float,
     taker_fee_rate: float,
     slippage_rate: float,
+    spread_pct: float,
+    max_spread_pct: float,
 ) -> SelectionDecision:
     """Fail closed unless regime, higher timeframe, quality and cost gates pass."""
     reasons: list[str] = []
@@ -122,6 +124,7 @@ def evaluate_long_candidate(
         "entry_distance_atr": chase_atr,
         "close_location": close_location,
         "round_trip_cost_pct": round_trip_cost_pct,
+        "spread_pct": spread_pct,
         "net_reward_risk": net_reward_risk,
     })
 
@@ -131,6 +134,8 @@ def evaluate_long_candidate(
         reasons.append("momentum_not_confirmed")
     if volume_ratio < 0.90:
         reasons.append("volume_below_relative_liquidity_floor")
+    if spread_pct < 0 or spread_pct > max_spread_pct:
+        reasons.append("bid_ask_spread_exceeds_liquidity_limit")
     if close_location < 0.55:
         reasons.append("weak_close_possible_false_breakout")
     if chase_atr > 1.5:
