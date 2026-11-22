@@ -110,7 +110,10 @@ def rsi_values(values: list[float], period: int = 14) -> list[float]:
 def daily_regime(daily_timestamps: list[int], daily_closes: list[float],
                  daily_sma200: list[float], timestamp: int) -> bool:
     idx = bisect.bisect_right(daily_timestamps, timestamp - ONE_DAY) - 1
-    return idx >= 199 and math.isfinite(daily_sma200[idx]) and daily_closes[idx] > daily_sma200[idx]
+    if idx < 199 or not math.isfinite(daily_sma200[idx]):
+        return False
+    age_since_close = timestamp - (daily_timestamps[idx] + ONE_DAY)
+    return 0 <= age_since_close < ONE_DAY and daily_closes[idx] > daily_sma200[idx]
 
 
 def indicators(data: dict[str, dict[str, list[list[float]]]]) -> dict[str, dict[str, Any]]:
@@ -257,7 +260,8 @@ def simulate(
             btc_item["daily_sma200"], ts + FOUR_HOURS))
         btc_idx = bisect.bisect_right(btc_item["daily_timestamps"], ts + FOUR_HOURS - ONE_DAY) - 1 if btc_item else -1
         btc_state = "unknown"
-        if btc_idx >= 0 and math.isfinite(btc_item["daily_sma200"][btc_idx]):
+        if (btc_idx >= 0 and math.isfinite(btc_item["daily_sma200"][btc_idx])
+                and 0 <= ts + FOUR_HOURS - (btc_item["daily_timestamps"][btc_idx] + ONE_DAY) < ONE_DAY):
             ratio = btc_item["daily_closes"][btc_idx] / btc_item["daily_sma200"][btc_idx]
             btc_state = "bull" if ratio > 1.01 else ("bear" if ratio < 0.99 else "sideways")
 
