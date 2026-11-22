@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from iskander_trade.backtest import BacktestConfig, compare_strategies
+from iskander_trade.backtest import BacktestConfig, aggregate_15m_to_1h, compare_strategies
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -59,33 +59,6 @@ def _write_csv(path: Path, rows: list[list[float]]) -> None:
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerows(rows)
-
-
-def _aggregate_15m_to_1h(rows: list[list[float]]) -> list[list[float]]:
-    """Build only complete 1h candles from four contiguous closed 15m candles."""
-    grouped: dict[int, list[list[float]]] = {}
-    for row in rows:
-        hour_start = (int(row[0]) // TIMEFRAMES["1h"]) * TIMEFRAMES["1h"]
-        grouped.setdefault(hour_start, []).append(row)
-
-    hourly: list[list[float]] = []
-    for hour_start, candles in sorted(grouped.items()):
-        candles.sort(key=lambda candle: int(candle[0]))
-        expected = [
-            hour_start + offset * TIMEFRAMES["15m"]
-            for offset in range(4)
-        ]
-        if [int(candle[0]) for candle in candles] != expected:
-            continue
-        hourly.append([
-            float(hour_start),
-            float(candles[0][1]),
-            max(float(candle[2]) for candle in candles),
-            min(float(candle[3]) for candle in candles),
-            float(candles[-1][4]),
-            sum(float(candle[5]) for candle in candles),
-        ])
-    return hourly
 
 
 def _fetch_history(
@@ -205,7 +178,7 @@ def main() -> None:
             args.cache_dir, provider=args.exchange,
             offline=args.offline, refresh=args.refresh,
         )
-        hourly = _aggregate_15m_to_1h(fifteen)
+        hourly = aggregate_15m_to_1h(fifteen)
         if len(hourly) < 100:
             raise SystemExit(
                 f"Insufficient complete aggregated 1h history for {symbol}: {len(hourly)} rows"
