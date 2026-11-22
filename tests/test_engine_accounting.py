@@ -3,7 +3,8 @@ from iskander_trade.engine import PaperTradingEngine
 
 
 class UnusedMarketData:
-    pass
+    def fetch_spread_pct(self, symbol):
+        return 0.1
 
 
 def test_close_position_records_net_pnl_after_entry_exit_fees_and_slippage():
@@ -24,7 +25,7 @@ def test_close_position_records_net_pnl_after_entry_exit_fees_and_slippage():
 
     engine._close_position("BTC/USDT", 110.0, "take_profit")
 
-    exit_price = 110.0 * (1.0 - settings.slippage_rate)
+    exit_price = 110.0 * (1.0 - settings.slippage_rate - 0.1 / 200.0)
     expected = (exit_price - 100.0) * 0.1 - 0.01 - exit_price * 0.1 * 0.001
     assert state["trade_history"][-1]["pnl_usdt"] == expected
     assert state["trade_history"][-1]["fees_usdt"] > 0
