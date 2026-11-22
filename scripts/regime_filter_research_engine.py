@@ -7,7 +7,6 @@ import time
 from collections import defaultdict
 from typing import Any
 
-
 SYMBOLS = ["BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT", "ADA/USDT"]
 FOUR_HOURS = 14_400_000
 ONE_DAY = 86_400_000
