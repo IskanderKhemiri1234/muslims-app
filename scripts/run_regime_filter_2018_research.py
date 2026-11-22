@@ -132,7 +132,11 @@ def run() -> dict:
                     "round_trip_spread_pct": spread,
                     "walk_forward": wf, "holdout": ho,
                     "continuous_30_day_folds": sim["folds"],
-                    "walk_forward_diagnostics": grouped(wf_trades, lambda t: t["symbol"]),
+                    "walk_forward_diagnostics": {
+                        "by_symbol": grouped(wf_trades, lambda t: t["symbol"]),
+                        "by_exit_reason": grouped(wf_trades, lambda t: t["exit_reason"]),
+                        "by_btc_regime_at_entry": grouped(wf_trades, lambda t: t.get("entry_btc_regime", "unknown")),
+                    },
                     "holdout_diagnostics": {
                         "by_symbol": grouped(ho_trades, lambda t: t["symbol"]),
                         "by_exit_reason": grouped(ho_trades, lambda t: t["exit_reason"]),
@@ -178,6 +182,11 @@ def run() -> dict:
                 s: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(data[s]["4h"][0][0] / 1000))
                 for s in engine.SYMBOLS
             },
+            "per_market_missing_1d_intervals": {
+                s: sum(1 for i in range(1, len(data[s]["1d"]))
+                       if int(data[s]["1d"][i][0]) - int(data[s]["1d"][i-1][0]) != engine.ONE_DAY)
+                for s in engine.SYMBOLS
+            },
             "per_market_missing_4h_intervals": {
                 s: sum(1 for i in range(1, len(data[s]["4h"]))
                        if int(data[s]["4h"][i][0]) - int(data[s]["4h"][i-1][0]) != engine.FOUR_HOURS)
@@ -205,6 +214,22 @@ def run() -> dict:
         },
         "regime_filter": "Entry-only global gate: a new position may open only when the last completed BTC daily close is above its daily SMA200. Existing positions exit only under their strategy's ordinary exit rules. SMA200 and all other thresholds are frozen.",
         "annual_and_regime_definition": "Trade-year is the UTC close year. Entry regime is bull when BTC close is >1% above SMA200, bear when >1% below, and sideways within the +/-1% band. This fixed neutral band is descriptive only; the actual entry filter remains strictly close>SMA200.",
+        "comparison_table": [
+            {
+                "strategy": value["strategy"],
+                "btc_sma200_filter": value["btc_sma200_filter"],
+                "spread_round_trip_pct": value["round_trip_spread_pct"],
+                "walk_forward_trades": value["walk_forward"]["trades"],
+                "walk_forward_expectancy_usdt": value["walk_forward"]["expectancy_usdt_per_trade"],
+                "walk_forward_profit_factor": value["walk_forward"]["profit_factor"],
+                "walk_forward_max_drawdown_usdt": value["walk_forward"]["max_drawdown_usdt"],
+                "holdout_trades": value["holdout"]["trades"],
+                "holdout_expectancy_usdt": value["holdout"]["expectancy_usdt_per_trade"],
+                "holdout_profit_factor": value["holdout"]["profit_factor"],
+                "holdout_max_drawdown_usdt": value["holdout"]["max_drawdown_usdt"],
+            }
+            for _, value in sorted(scenarios.items())
+        ],
         "scenarios": scenarios,
         "acceptance_decisions_at_0_10_spread_only": decisions,
         "overall_result": "PENDING_REPORT_GENERATION",
