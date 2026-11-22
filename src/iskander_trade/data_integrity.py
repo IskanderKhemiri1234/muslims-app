@@ -6,7 +6,6 @@ import math
 import time
 from collections.abc import Sequence
 
-
 _TIMEFRAME_MS = {
     "1m": 60_000,
     "3m": 180_000,
