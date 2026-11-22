@@ -91,7 +91,7 @@ def test_trade_net_pnl_reconciles_gross_minus_all_costs():
 def test_okx_history_starts_at_listing_and_does_not_fill_gaps(monkeypatch):
     now = 1_700_000_000_000
     duration = engine.FOUR_HOURS
-    listing = now - 5 * duration
+    listing = (now - 5 * duration) - (now - 5 * duration) % duration
 
     class FakeExchange:
         rateLimit = 0
