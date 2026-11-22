@@ -1,9 +1,4 @@
-"""Continuous-portfolio walk-forward and locked-rule strategy research.
-
-Research only. The walk-forward portfolio is simulated once across all folds:
-equity, open positions, trailing stops, and drawdown carry across fold boundaries.
-The final locked-rule period is evaluated separately with fresh virtual capital.
-"""
+"""Shared continuous-portfolio simulator for frozen Donchian/Momentum research."""
 from __future__ import annotations
 
 import bisect
