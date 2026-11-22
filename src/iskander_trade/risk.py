@@ -18,6 +18,7 @@ def size_position(
     stop_loss_pct: float, max_position_notional_usdt: float,
     open_positions: int, max_open_positions: int, daily_pnl_usdt: float,
     max_daily_loss_usdt: float, current_exposure_usdt: float,
+    cost_pct: float = 0.0,
 ) -> RiskDecision:
     if price <= 0:
         return RiskDecision(False, 0.0, 0.0, "Price must be positive.")
@@ -26,7 +27,8 @@ def size_position(
     if open_positions >= max_open_positions:
         return RiskDecision(False, 0.0, 0.0, "Maximum open positions reached.")
     available = max(0.0, capital_usdt - current_exposure_usdt)
-    risk_based_notional = risk_per_trade_usdt / (stop_loss_pct / 100.0)
+    effective_risk_pct = (stop_loss_pct + max(0.0, cost_pct)) / 100.0
+    risk_based_notional = risk_per_trade_usdt / effective_risk_pct
     notional = min(risk_based_notional, max_position_notional_usdt, available)
     if notional <= 0:
         return RiskDecision(False, 0.0, 0.0, "No available virtual capital.")
