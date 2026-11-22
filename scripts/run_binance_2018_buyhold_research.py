@@ -345,12 +345,17 @@ def run() -> dict:
             year for year, metrics in result["yearly"].items()
             if metrics["expectancy_usdt_per_trade"] > 0
         ]
-        positive_bear_or_sideways_year = any(
-            metrics["expectancy_usdt_per_trade"] > 0
-            for year in result["yearly"].values()
-            for regime, metrics in year["by_btc_descriptive_regime_at_entry"].items()
-            if regime in {"bear", "sideways"}
-        )
+        positive_bear_or_sideways_years = [
+            year for year, annual_metrics in result["yearly"].items()
+            if annual_metrics["expectancy_usdt_per_trade"] > 0
+            and any(
+                regime_metrics["expectancy_usdt_per_trade"] > 0
+                for regime, regime_metrics in annual_metrics[
+                    "by_btc_descriptive_regime_at_entry"
+                ].items()
+                if regime in {"bear", "sideways"}
+            )
+        ]
         checks = {
             "walk_forward_at_least_100_trades": wf["trades"] >= 100,
             "positive_expectancy_walk_forward": wf["expectancy_usdt_per_trade"] > 0,
@@ -368,11 +373,11 @@ def run() -> dict:
             "calmar_above_equal_weight_buy_hold": (
                 result["calmar_comparison"]["beats_equal_weight_buy_hold"]),
             "positive_expectancy_in_at_least_3_years": len(positive_years) >= 3,
-            "positive_expectancy_in_bear_or_sideways_year": positive_bear_or_sideways_year,
+            "positive_expectancy_in_bear_or_sideways_year": bool(positive_bear_or_sideways_years),
         }
         decisions[key] = {
             "checks": checks, "accepted": all(checks.values()),
-            "positive_expectancy_years": positive_years,
+            "positive_expectancy_years": positive_years,\n            "positive_bear_or_sideways_years": positive_bear_or_sideways_years,
         }
 
     accepted = sum(item["accepted"] for item in decisions.values())
