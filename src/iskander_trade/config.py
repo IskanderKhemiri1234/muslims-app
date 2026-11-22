@@ -32,6 +32,9 @@ class Settings:
         if item.strip()
     )
     timeframe: str = os.getenv("TIMEFRAME", "15m")
+    context_timeframe: str = os.getenv("CONTEXT_TIMEFRAME", "1h")
+    taker_fee_rate: float = _float("TAKER_FEE_RATE", 0.001)
+    slippage_rate: float = _float("SLIPPAGE_RATE", 0.0005)
     candle_limit: int = _int("CANDLE_LIMIT", 180)
     poll_seconds: int = _int("POLL_SECONDS", 900)
     virtual_capital_usdt: float = _float("VIRTUAL_CAPITAL_USDT", 70.0)
@@ -54,6 +57,10 @@ class Settings:
             )
         if self.timeframe != "15m":
             raise ValueError("The automatic paper scheduler currently requires TIMEFRAME=15m.")
+        if self.context_timeframe != "1h":
+            raise ValueError("The trade-selection context currently requires CONTEXT_TIMEFRAME=1h.")
+        if not 0 <= self.taker_fee_rate < 0.02 or not 0 <= self.slippage_rate < 0.02:
+            raise ValueError("TAKER_FEE_RATE and SLIPPAGE_RATE must be between 0 and 0.02.")
         if not self.watchlist:
             raise ValueError("WATCHLIST must contain at least one market.")
         if len(set(self.watchlist)) != len(self.watchlist):
