@@ -21,7 +21,7 @@ def _synthetic_data():
     daily_start = base - 220 * engine.ONE_DAY
     btc_daily = []
     eth_daily = []
-    for i in range(220):
+    for i in range(231):
         btc_close = 100.0 if i < 200 else 80.0
         eth_close = 100.0 if i < 200 else 110.0
         btc_daily.append([daily_start + i * engine.ONE_DAY, btc_close, btc_close + 1, btc_close - 1, btc_close, 1000])
