@@ -377,7 +377,8 @@ def run() -> dict:
         }
         decisions[key] = {
             "checks": checks, "accepted": all(checks.values()),
-            "positive_expectancy_years": positive_years,\n            "positive_bear_or_sideways_years": positive_bear_or_sideways_years,
+            "positive_expectancy_years": positive_years,
+            "positive_bear_or_sideways_years": positive_bear_or_sideways_years,
         }
 
     accepted = sum(item["accepted"] for item in decisions.values())
