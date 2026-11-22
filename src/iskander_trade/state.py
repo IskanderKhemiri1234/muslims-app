@@ -13,7 +13,7 @@ def empty_state() -> dict[str, Any]:
     return {
         "day": date.today().isoformat(), "daily_pnl_usdt": 0.0,
         "total_realized_pnl_usdt": 0.0, "positions": {},
-        "last_processed_candles": {}, "trade_history": [],
+        "last_processed_candles": {}, "trade_history": [], "decision_history": [],
     }
 
 
