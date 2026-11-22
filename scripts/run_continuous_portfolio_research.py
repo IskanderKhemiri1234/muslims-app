@@ -191,7 +191,8 @@ def simulate(
         half_spread = spread_pct / 200.0
         exit_fill = raw_exit * (1 - SLIPPAGE_RATE - half_spread)
         exit_fee = exit_fill * p["qty"] * FEE_RATE
-        gross = (exit_fill - p["entry_fill"]) * p["qty"]
+        execution_adjusted_gross = (exit_fill - p["entry_fill"]) * p["qty"]
+        gross = (raw_exit - p["raw_entry_price"]) * p["qty"]
         fees = p["entry_fee"] + exit_fee
         net = gross - fees
         realized += net
@@ -200,7 +201,8 @@ def simulate(
             "symbol": symbol, "opened_at": p["opened_at"], "closed_at": ts,
             "entry_price": p["entry_fill"], "exit_price": exit_fill,
             "quantity": p["qty"], "notional_usdt": p["notional"],
-            "gross_pnl_usdt": gross, "fees_usdt": fees,
+            "gross_pnl_usdt": gross, "execution_adjusted_gross_pnl_usdt": execution_adjusted_gross,
+            "fees_usdt": fees,
             "entry_execution_cost_usdt": p["entry_execution_cost"],
             "exit_execution_cost_usdt": exit_execution_cost,
             "total_costs_usdt": fees + p["entry_execution_cost"] + exit_execution_cost,
@@ -264,7 +266,7 @@ def simulate(
                     "qty": qty, "notional": notional, "entry_fill": fill,
                     "entry_fee": notional * FEE_RATE,
                     "entry_execution_cost": abs(fill - bar[1]) * qty,
-                    "opened_at": ts, "stop": bar[1] - stop_distance, "entry_atr": atr,
+                    "raw_entry_price": bar[1], "opened_at": ts, "stop": bar[1] - stop_distance, "entry_atr": atr,
                     "highest_close": bar[1],
                 }
 
