@@ -34,7 +34,7 @@ jobs:
       - name: Download public candles and run comparison
         run: |
           python scripts/run_backtest.py \
-            --exchange okx \
+            --exchange gateio \
             --since 2024-01-01 \
             --holdout-days 90 \
             --walk-forward-days 30 \
