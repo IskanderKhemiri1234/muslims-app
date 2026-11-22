@@ -14,6 +14,10 @@ A standalone multi-symbol Binance Spot research and paper-trading application. I
 - Paper settings: 70 USDT virtual capital, 0.35 USDT planned risk per trade, 1.40 USDT daily realized-loss guard, maximum 3 positions, 20 USDT position-notional cap, 2% stop and 4% target.
 - No real orders, futures, leverage, or exchange account credentials.
 
+## Market-data integrity gate
+
+Every OHLCV batch is validated before it reaches the EMA strategy. The gate rejects unsupported intervals, insufficient history, malformed/non-numeric/non-finite rows, unaligned or duplicate/out-of-order timestamps, impossible OHLC relationships, negative prices or volume, future-dated candles, and data older than two timeframe intervals. A rejected market is skipped for that cycle and cannot create a paper entry. The strategy continues to exclude the currently-forming candle. These checks establish input integrity; they do not establish predictive edge or profitability.
+
 ## Dashboard experience
 
 The responsive Iskander AI Trade dashboard uses a dark emerald terminal layout with a compact mobile bottom navigation, a live six-market universe strip, portfolio performance chart, open paper positions, recent trade activity, and a strategy/risk snapshot populated from the active server configuration. All displayed balances and P/L values are explicitly virtual paper-trading values.
