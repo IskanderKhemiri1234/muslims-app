@@ -14,6 +14,10 @@ A standalone multi-symbol Binance Spot research and paper-trading application. I
 - Paper settings: 70 USDT virtual capital, 0.35 USDT planned risk per trade, 1.40 USDT daily realized-loss guard, maximum 3 positions, 20 USDT position-notional cap, 2% stop and 4% target.
 - No real orders, futures, leverage, or exchange account credentials.
 
+## Dashboard experience
+
+The responsive Iskander AI Trade dashboard uses a dark emerald terminal layout with a compact mobile bottom navigation, a live six-market universe strip, portfolio performance chart, open paper positions, recent trade activity, and a strategy/risk snapshot populated from the active server configuration. All displayed balances and P/L values are explicitly virtual paper-trading values.
+
 ## Low-memory deployment
 
 The web runtime dependencies are intentionally kept small. NumPy and scikit-learn are optional and are not installed by the normal production install. The on-demand ML endpoint requires the `research` extra and may exceed a 512 MB memory limit; do not run it on a 512 MB instance. Research tests install the ML dependencies through the dev extra.
