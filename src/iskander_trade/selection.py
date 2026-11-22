@@ -6,6 +6,7 @@ All thresholds are explicit screening heuristics and must be evaluated out of sa
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from .indicators import ema
@@ -110,7 +111,7 @@ def evaluate_long_candidate(
     volume_baseline = sum(volumes[-21:-1]) / 20
     volume_ratio = volumes[-1] / volume_baseline if volume_baseline > 0 else 0.0
     momentum_pct = (closes[-1] / closes[-4] - 1.0) * 100 if closes[-4] else 0.0
-    chase_atr = abs(entry_price - fast_15m[-1]) / atr if atr > 0 else float("inf")
+    chase_atr = abs(entry_price - fast_15m[-1]) / atr if atr > 0 else 999.0
     candle_range = highs[-1] - lows[-1]
     close_location = (closes[-1] - lows[-1]) / candle_range if candle_range > 0 else 0.0
     round_trip_cost_pct = 2.0 * (taker_fee_rate + slippage_rate) * 100.0
@@ -134,7 +135,7 @@ def evaluate_long_candidate(
         reasons.append("momentum_not_confirmed")
     if volume_ratio < 0.90:
         reasons.append("volume_below_relative_liquidity_floor")
-    if spread_pct < 0 or spread_pct > max_spread_pct:
+    if not math.isfinite(spread_pct) or spread_pct < 0 or spread_pct > max_spread_pct:
         reasons.append("bid_ask_spread_exceeds_liquidity_limit")
     if close_location < 0.55:
         reasons.append("weak_close_possible_false_breakout")
