@@ -135,6 +135,9 @@ def status_payload() -> dict[str, Any]:
     return {
         "mode": "paper", "watchlist": list(settings.watchlist),
         "timeframe": settings.timeframe,
+        "context_timeframe": settings.context_timeframe,
+        "taker_fee_rate": settings.taker_fee_rate,
+        "slippage_rate": settings.slippage_rate,
         "virtual_capital_usdt": settings.virtual_capital_usdt,
         "risk_per_trade_usdt": settings.risk_per_trade_usdt,
         "max_daily_loss_usdt": settings.max_daily_loss_usdt,
@@ -148,6 +151,7 @@ def status_payload() -> dict[str, Any]:
         "total_realized_pnl_usdt": state.get("total_realized_pnl_usdt", 0.0),
         "positions": state.get("positions", {}),
         "trade_history": state.get("trade_history", [])[-50:],
+        "decision_history": state.get("decision_history", [])[-100:],
         "state_persistence": "atomic_json_with_backup_on_configured_host_path",
         "automatic_cycle": AUTO_PAPER_ENABLED,
     }
