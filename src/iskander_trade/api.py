@@ -174,7 +174,10 @@ def markets() -> dict[str, Any]:
 @app.get("/api/v1/ml/evaluate", dependencies=[Depends(require_dashboard_token)])
 def evaluate_ml() -> dict[str, Any]:
     """Load heavy research dependencies only when explicitly requested."""
-    from .ml import train_research_model
+    try:
+        from .ml import train_research_model
+    except ModuleNotFoundError as exc:
+        raise HTTPException(status_code=503, detail="Install the optional research dependencies to enable ML evaluation.") from exc
 
     client = BinanceMarketData()
     reports: list[dict[str, Any]] = []
