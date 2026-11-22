@@ -6,7 +6,7 @@ def _candles(count, *, start, step, spread, volume=10.0):
     for index in range(count):
         close = start + index * step
         rows.append([
-            index * 900_000, close - spread * 0.2, close + spread,
+            index * 900_000, close - spread * 0.2, close + spread * 0.5,
             close - spread, close, volume,
         ])
     return rows
