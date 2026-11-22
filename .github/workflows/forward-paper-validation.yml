@@ -1,8 +1,6 @@
 name: Iskander Forward Locked Paper Validation
 
 on:
-  schedule:
-    - cron: "17 */4 * * *"
   workflow_dispatch:
   push:
     branches: [research/portfolio-walkforward-v2]
