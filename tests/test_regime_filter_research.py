@@ -85,3 +85,33 @@ def test_trade_net_pnl_reconciles_gross_minus_all_costs():
     assert trade["fees_usdt"] > 0
     assert trade["entry_execution_cost_usdt"] > 0
     assert trade["exit_execution_cost_usdt"] > 0
+
+
+
+def test_okx_history_starts_at_listing_and_does_not_fill_gaps(monkeypatch):
+    now = 1_700_000_000_000
+    duration = engine.FOUR_HOURS
+    listing = now - 5 * duration
+
+    class FakeExchange:
+        rateLimit = 0
+
+        def parse_timeframe(self, timeframe):
+            return 4 * 60 * 60
+
+        def market(self, symbol):
+            return {"info": {"listTime": str(listing)}}
+
+        def fetch_ohlcv(self, symbol, timeframe, since, limit):
+            return [
+                [listing, 10, 11, 9, 10, 100],
+                [listing + duration, 10, 11, 9, 10, 100],
+                [listing + 3 * duration, 10, 11, 9, 10, 100],
+            ] if since <= listing + 3 * duration else []
+
+    monkeypatch.setattr(engine.time, "time", lambda: now / 1000)
+    monkeypatch.setattr(engine.time, "sleep", lambda _: None)
+    result = engine.fetch_history(FakeExchange(), "SOL/USDT", "4h", 1_500_000_000_000)
+    assert [int(row[0]) for row in result] == [
+        listing, listing + duration, listing + 3 * duration
+    ]
