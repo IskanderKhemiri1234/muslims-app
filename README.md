@@ -101,3 +101,25 @@ A long EMA crossover is only a candidate, not an automatic entry. The paper engi
 The screening thresholds are explicit initial heuristics, not fitted probabilities or claims of an edge. Defaults for execution-cost research are `TAKER_FEE_RATE=0.001`, `SLIPPAGE_RATE=0.0005`, and `MAX_SPREAD_PCT=0.15`; confirm actual venue fees and calibrate assumptions before interpreting results. The engine records up to 500 candidate decisions in persistent state and exposes the latest 100 through the protected status API. Paper entry sizing includes estimated round-trip costs, and paper fills model half-spread plus slippage on each side, and closed-trade P/L deducts entry/exit fees and modeled execution costs.
 
 These controls do not establish profitability. They must be compared with the EMA baseline using the same chronological data, realistic costs, walk-forward validation, and a final untouched holdout before any claim of improved performance.
+
+
+## Historical EMA comparison, walk-forward and holdout
+
+Run the research-only historical comparison from a trusted Python 3.11 environment:
+
+```bash
+pip install -e ".[dev]"
+python scripts/run_backtest.py --since 2024-01-01
+```
+
+The runner downloads public Binance Spot OHLCV for the six configured markets at 15m and 1h, caches CSV files under `data/research/`, and writes `reports/ema_backtest_report.json`. Reuse a complete local cache with `--offline`. Downloaded candles and reports are intentionally git-ignored.
+
+The report compares the unfiltered EMA 20/50 crossover baseline with the same EMA entry candidates after the regime, 1h context, momentum, relative-volume, spread, candle-close, anti-chase and net reward/risk gates. Both strategies use the same chronological candles, portfolio capital, risk sizing, maximum position count, stop/target rules, next-open fills and modeled execution costs.
+
+Metrics include net P/L, win rate, average winning and losing trade, expectancy per trade, profit factor, mark-to-market maximum drawdown, fees, modeled slippage, assumed spread cost, selection rejections by candidate and reason, capacity rejections, and per-market trade statistics. Signals are evaluated only after a candle closes and filled at the next 15m open. If a candle touches both stop and target, the simulator assumes the stop occurred first. Missing historical candle intervals fail closed.
+
+Walk-forward uses sequential 30-day out-of-sample folds after a 180-day indicator/context warmup. The final 90 days are reserved as an untouched holdout. Parameters are frozen: the warmup period initializes causal indicators and does not fit or optimize thresholds. Each fold and the holdout start with the configured virtual capital; pooled walk-forward P/L is explicitly the sum of independent folds, and the report also shows the worst fold drawdown. Do not tune settings after viewing holdout results.
+
+**Spread limitation:** Binance OHLCV does not contain historical best-bid/ask quotes. The default 0.05% round-trip spread is an explicit assumption, not a measured historical spread. Change it with `--assumed-spread-pct 0.10` and rerun sensitivity scenarios before interpreting the results. Taker fee and slippage defaults are also assumptions and must be replaced with the applicable account/venue fee schedule and defensible execution estimates.
+
+The backtest is a research simulation, not live execution evidence. A positive result is not proof of a durable edge or future profitability.
