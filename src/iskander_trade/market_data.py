@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import ccxt
 
+from .data_integrity import validate_ohlcv_candles
+
 
 class BinanceMarketData:
     def __init__(self) -> None:
@@ -17,9 +19,10 @@ class BinanceMarketData:
 
     def fetch_candles(self, symbol: str, timeframe: str, limit: int) -> list[list[float]]:
         rows = self.exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
-        if not rows or len(rows) < 3:
-            raise RuntimeError(f"Insufficient OHLCV data for {symbol}.")
-        return rows
+        try:
+            return validate_ohlcv_candles(rows, timeframe)
+        except ValueError as exc:
+            raise RuntimeError(f"Market data rejected for {symbol}: {exc}") from exc
 
     def fetch_last_price(self, symbol: str) -> float:
         ticker = self.exchange.fetch_ticker(symbol)
