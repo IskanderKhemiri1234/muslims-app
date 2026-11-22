@@ -35,6 +35,7 @@ class Settings:
     context_timeframe: str = os.getenv("CONTEXT_TIMEFRAME", "1h")
     taker_fee_rate: float = _float("TAKER_FEE_RATE", 0.001)
     slippage_rate: float = _float("SLIPPAGE_RATE", 0.0005)
+    max_spread_pct: float = _float("MAX_SPREAD_PCT", 0.15)
     candle_limit: int = _int("CANDLE_LIMIT", 180)
     poll_seconds: int = _int("POLL_SECONDS", 900)
     virtual_capital_usdt: float = _float("VIRTUAL_CAPITAL_USDT", 70.0)
@@ -61,6 +62,8 @@ class Settings:
             raise ValueError("The trade-selection context currently requires CONTEXT_TIMEFRAME=1h.")
         if not 0 <= self.taker_fee_rate < 0.02 or not 0 <= self.slippage_rate < 0.02:
             raise ValueError("TAKER_FEE_RATE and SLIPPAGE_RATE must be between 0 and 0.02.")
+        if not 0 < self.max_spread_pct <= 2.0:
+            raise ValueError("MAX_SPREAD_PCT must be greater than 0 and no more than 2.")
         if not self.watchlist:
             raise ValueError("WATCHLIST must contain at least one market.")
         if len(set(self.watchlist)) != len(self.watchlist):
