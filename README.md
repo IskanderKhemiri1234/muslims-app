@@ -93,3 +93,11 @@ It checks HTTPS health, paper-only mode, scheduler startup, the six configured m
 This branch is being prepared for the free Enzonic Python service. The service has not yet been provisioned: the free request is still waiting for available capacity. No live dashboard URL exists until the provider finishes creating the server and the app is deployed and health-checked. Do not select paid capacity to bypass the queue.
 
 No trading system can guarantee profit. Do not connect real funds based on paper or ML research results.
+
+## Regime-aware trade selection (paper research gate)
+
+A long EMA crossover is only a candidate, not an automatic entry. The paper engine now requires a 15-minute uptrend regime, a rising 1-hour EMA20/EMA50 context, positive short-horizon momentum, relative volume, a validated bid/ask spread within the configured limit, a non-extended entry distance from EMA20 measured in ATR, a strong candle close as a wick/failed-breakout risk proxy, and a minimum net reward/risk after estimated round-trip taker fees and slippage. Range, downtrend, transition, volatility-shock, missing-context, and failed-quality candidates are rejected with reason codes.
+
+The screening thresholds are explicit initial heuristics, not fitted probabilities or claims of an edge. Defaults for execution-cost research are `TAKER_FEE_RATE=0.001`, `SLIPPAGE_RATE=0.0005`, and `MAX_SPREAD_PCT=0.15`; confirm actual venue fees and calibrate assumptions before interpreting results. The engine records up to 500 candidate decisions in persistent state and exposes the latest 100 through the protected status API. Paper entry sizing includes estimated round-trip costs, and closed-trade P/L deducts entry/exit fees and modeled slippage.
+
+These controls do not establish profitability. They must be compared with the EMA baseline using the same chronological data, realistic costs, walk-forward validation, and a final untouched holdout before any claim of improved performance.
