@@ -1,0 +1,50 @@
+name: Iskander 2018 Regime Filter Research
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/regime-filter-2018-v1]
+    paths:
+      - "scripts/regime_filter_research_engine.py"
+      - "scripts/run_regime_filter_2018_research.py"
+      - "tests/test_regime_filter_research.py"
+      - ".github/workflows/regime-filter-2018-research.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iskander-regime-filter-2018
+  cancel-in-progress: false
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout isolated research branch
+        uses: actions/checkout@v4
+        with:
+          ref: research/regime-filter-2018-v1
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Unit tests
+        run: pytest -q tests/test_regime_filter_research.py
+      - name: Ruff
+        run: ruff check scripts/regime_filter_research_engine.py scripts/run_regime_filter_2018_research.py tests/test_regime_filter_research.py
+      - name: Download OKX history and run frozen experiment
+        run: python scripts/run_regime_filter_2018_research.py
+      - name: Upload complete research report
+        uses: actions/upload-artifact@v4
+        with:
+          name: iskander-regime-filter-2018-report
+          path: reports/regime_filter_2018_research.json
+          if-no-files-found: error
+          retention-days: 90
