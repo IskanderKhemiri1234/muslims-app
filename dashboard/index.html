@@ -21,15 +21,59 @@ table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:11px;bor
 <script>
 let token="";
 function message(text){document.getElementById("message").textContent=text}
-async function api(path,options={}){const r=await fetch(path,{...options,headers:{...(options.headers||{}),Authorization:"Bearer "+token}});if(!r.ok)throw Error(await r.text());return r.json()}
+function renderRows(tableId, rows, emptyText, columnCount){
+  const body=document.getElementById(tableId);
+  if(!rows.length){
+    const row=document.createElement("tr");
+    const cell=document.createElement("td");
+    cell.colSpan=columnCount;
+    cell.textContent=emptyText;
+    row.append(cell);
+    body.replaceChildren(row);
+    return;
+  }
+  const fragment=document.createDocumentFragment();
+  for(const values of rows){
+    const row=document.createElement("tr");
+    for(const value of values){
+      const cell=document.createElement("td");
+      cell.textContent=String(value??"—");
+      row.append(cell);
+    }
+    fragment.append(row);
+  }
+  body.replaceChildren(fragment);
+}
+async function api(path,options={}){const r=await fetch(path,{...options,cache:"no-store",headers:{...(options.headers||{}),Authorization:"Bearer "+token}});if(!r.ok)throw Error(await r.text());return r.json()}
 function disconnect(){token="";document.getElementById("token").value="";message("Disconnected.")}
-async function connect(){token=document.getElementById("token").value.trim();try{const [s,m,h]=await Promise.all([api("/api/v1/status"),api("/api/v1/markets"),fetch("/health").then(r=>r.json())]);
-document.getElementById("capital").textContent=Number(s.virtual_capital_usdt).toFixed(2)+" USDT";document.getElementById("daily").textContent=Number(s.daily_pnl_usdt).toFixed(4)+" USDT";document.getElementById("total").textContent=Number(s.total_realized_pnl_usdt).toFixed(4)+" USDT";document.getElementById("positions").textContent=Object.keys(s.positions).length;
-document.getElementById("scheduler").textContent="Automatic 15-minute cycle: "+(h.execution==="automatic_15m"?"enabled":"disabled")+" · timeframe "+h.timeframe;
-document.getElementById("state-note").textContent="State path: "+s.state_persistence+". Backups are written beside the state file; host disk must persist across restarts.";
-document.getElementById("markets").innerHTML=m.markets.map(x=>"<tr><td>"+x.symbol+"</td><td>"+(x.price??x.error??"—")+"</td></tr>").join("");
-document.getElementById("trades").innerHTML=s.trade_history.slice().reverse().map(x=>"<tr><td>"+x.symbol+"</td><td>"+x.side+"</td><td>"+Number(x.price).toFixed(5)+"</td><td>"+(x.reason??"—")+"</td></tr>").join("")||"<tr><td colspan='4'>No trades yet</td></tr>";
-message("Connected · Paper mode");}catch(e){token="";message("Connection failed: "+e.message)}}
+async function connect(){
+  token=document.getElementById("token").value.trim();
+  document.getElementById("token").value="";
+  try{
+    const [s,m,h]=await Promise.all([api("/api/v1/status"),api("/api/v1/markets"),fetch("/health",{cache:"no-store"}).then(r=>r.json())]);
+    document.getElementById("capital").textContent=Number(s.virtual_capital_usdt).toFixed(2)+" USDT";
+    document.getElementById("daily").textContent=Number(s.daily_pnl_usdt).toFixed(4)+" USDT";
+    document.getElementById("total").textContent=Number(s.total_realized_pnl_usdt).toFixed(4)+" USDT";
+    document.getElementById("positions").textContent=Object.keys(s.positions).length;
+    document.getElementById("scheduler").textContent="Automatic 15-minute cycle: "+(h.execution==="automatic_15m"?"enabled":"disabled")+" · scheduler "+h.scheduler+" · timeframe "+h.timeframe;
+    document.getElementById("state-note").textContent="State path: "+s.state_persistence+". Backups are written beside the state file; host disk must persist across restarts.";
+    renderRows("markets",m.markets.map(x=>[x.symbol,x.price??x.error]),"No market data available.",2);
+    renderRows("trades",s.trade_history.slice().reverse().map(x=>[x.symbol,x.side,Number(x.price).toFixed(5),x.reason??"—"]),"No trades yet.",4);
+    message("Connected · Paper mode");
+  }catch(e){
+    token="";
+    message("Connection failed: "+e.message);
+  }
+}
 async function runCycle(){try{await api("/api/v1/paper/cycle",{method:"POST"});await connect();message("Paper cycle completed.")}catch(e){message("Paper cycle failed: "+e.message)}}
-async function evaluateModel(){try{const result=await api("/api/v1/ml/evaluate");document.getElementById("ml-results").innerHTML=result.reports.map(x=>"<tr><td>"+x.symbol+"</td><td>"+(x.samples??"—")+"</td><td>"+(x.accuracy===undefined?"—":(x.accuracy*100).toFixed(1)+"%")+"</td><td>"+(x.baseline_accuracy===undefined?"—":(x.baseline_accuracy*100).toFixed(1)+"%")+"</td><td>"+(x.assessment??x.error??"—")+"</td></tr>").join("")}catch(e){message("ML evaluation failed: "+e.message)}}
+async function evaluateModel(){
+  try{
+    const result=await api("/api/v1/ml/evaluate");
+    renderRows("ml-results",result.reports.map(x=>[
+      x.symbol,x.samples??"—",x.accuracy===undefined?"—":(x.accuracy*100).toFixed(1)+"%",
+      x.baseline_accuracy===undefined?"—":(x.baseline_accuracy*100).toFixed(1)+"%",
+      x.assessment??x.error??"—"
+    ]),"No research results.",5);
+  }catch(e){message("ML evaluation failed: "+e.message)}
+}
 </script></body></html>
