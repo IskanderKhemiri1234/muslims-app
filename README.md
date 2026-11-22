@@ -70,6 +70,16 @@ ML evaluation is explicitly on-demand, uses chronological TimeSeriesSplit and a 
 
 The Android WebView client accepts the deployed HTTPS dashboard URL. It does not contain exchange credentials. The GitHub Actions workflow builds an installable debug APK; this is not a Play Store production release.
 
+## Post-deployment smoke test
+
+After the provider has started the service and the HTTPS URL is active, run the safe smoke test from a trusted terminal:
+
+```bash
+BASE_URL=https://your-service-url DASHBOARD_TOKEN="$DASHBOARD_TOKEN" python scripts/smoke_test.py
+```
+
+It checks HTTPS health, paper-only mode, scheduler startup, the six configured markets, dashboard authentication, paper capital/risk settings, and market-data API access. It does not trigger a trading cycle and does not submit orders. Do not paste the dashboard token into chat or commit it.
+
 ## Deployment status
 
 This branch is being prepared for the free Enzonic Python service. The service has not yet been provisioned: the free request is still waiting for available capacity. No live dashboard URL exists until the provider finishes creating the server and the app is deployed and health-checked. Do not select paid capacity to bypass the queue.
