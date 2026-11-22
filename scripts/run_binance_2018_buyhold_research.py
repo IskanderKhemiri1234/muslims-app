@@ -1,6 +1,7 @@
 """Frozen Donchian/Momentum replay on Binance Vision with Buy & Hold references."""
 from __future__ import annotations
 
+import bisect
 import json
 import time
 from collections import defaultdict
@@ -106,14 +107,39 @@ def summarize(trades: list[dict], points: list[dict], start: int, end: int) -> d
     return metrics
 
 
-def yearly_report(trades: list[dict]) -> dict:
+def annotate_binary_btc_regime(trades: list[dict], prepared: dict) -> None:
+    btc = prepared["BTC/USDT"]
+    stamps = btc["daily_timestamps"]
+    closes = btc["daily_closes"]
+    averages = btc["daily_sma200"]
+    for trade in trades:
+        opened_at = int(trade["opened_at"])
+        idx = bisect.bisect_right(stamps, opened_at - engine.ONE_DAY) - 1
+        label = "unknown"
+        if idx >= 199 and math.isfinite(averages[idx]):
+            age = opened_at - (stamps[idx] + engine.ONE_DAY)
+            if 0 <= age < engine.ONE_DAY:
+                label = "above_sma200" if closes[idx] > averages[idx] else "below_or_equal_sma200"
+        trade["entry_btc_binary_regime"] = label
+
+
+def yearly_report(trades: list[dict], points: list[dict]) -> dict:
     years = sorted({_year(t["closed_at"]) for t in trades})
     result = {}
     for year in years:
         subset = [t for t in trades if _year(t["closed_at"]) == year]
+        year_points = [p for p in points if _year(p["timestamp"]) == year]
+        portfolio_peak = float(year_points[0]["equity"]) if year_points else CAPITAL
+        portfolio_dd = 0.0
+        for point in year_points:
+            portfolio_peak = max(portfolio_peak, float(point["equity"]))
+            portfolio_dd = max(portfolio_dd, portfolio_peak - float(point["adverse_equity"]))
         result[year] = {
             **trade_metrics(subset),
-            "by_btc_regime_at_entry": grouped_trades(
+            "max_portfolio_drawdown_usdt": portfolio_dd,
+            "by_btc_binary_regime_at_entry": grouped_trades(
+                subset, lambda trade: trade.get("entry_btc_binary_regime", "unknown")),
+            "by_btc_descriptive_regime_at_entry": grouped_trades(
                 subset, lambda trade: trade.get("entry_btc_regime", "unknown")),
             "by_symbol": grouped_trades(subset, lambda trade: trade["symbol"]),
             "by_exit_reason": grouped_trades(subset, lambda trade: trade["exit_reason"]),
@@ -236,6 +262,7 @@ def run() -> dict:
                     fold_days=FOLD_DAYS, btc_filter=use_filter, liquidate_at_end=False,
                 )
                 trades, points = sim["trades"], sim["equity_curve"]
+                annotate_binary_btc_regime(trades, prepared)
                 wf = summarize(trades, points, wf_start, holdout_start)
                 ho = summarize(trades, points, holdout_start, last_ts + engine.FOUR_HOURS)
                 all_metrics = trade_metrics(trades)
@@ -243,11 +270,13 @@ def run() -> dict:
                 all_metrics.update(full_curve)
                 wf_trades = [t for t in trades if wf_start <= t["closed_at"] < holdout_start]
                 ho_trades = [t for t in trades if holdout_start <= t["closed_at"] < last_ts + engine.FOUR_HOURS]
-                annual = yearly_report(wf_trades + ho_trades)
+                annual = yearly_report(wf_trades + ho_trades, points)
                 year_share = positive_concentration(
                     trades, lambda t: _year(t["closed_at"]))
                 symbol_share = positive_concentration(trades, lambda t: t["symbol"])
                 regime_all = grouped_trades(
+                    trades, lambda t: t.get("entry_btc_binary_regime", "unknown"))
+                descriptive_regime_all = grouped_trades(
                     trades, lambda t: t.get("entry_btc_regime", "unknown"))
                 key = f"{strategy}|btc_sma200_filter={str(use_filter).lower()}|spread={spread:.2f}%"
                 benchmark = benchmark_by_spread[f"{spread:.2f}"]["equal_weight"]
@@ -258,18 +287,22 @@ def run() -> dict:
                     "walk_forward": wf,
                     "holdout": ho,
                     "full_period": all_metrics,
-                    "full_period_btc_regime_at_entry": regime_all,
+                    "full_period_btc_regime_at_entry": regime_all,\n                    "full_period_btc_descriptive_regime_at_entry": descriptive_regime_all,
                     "continuous_30_day_folds": sim["folds"],
                     "walk_forward_diagnostics": {
                         "by_symbol": grouped_trades(wf_trades, lambda t: t["symbol"]),
                         "by_exit_reason": grouped_trades(wf_trades, lambda t: t["exit_reason"]),
-                        "by_btc_regime_at_entry": grouped_trades(
+                        "by_btc_binary_regime_at_entry": grouped_trades(
+                            wf_trades, lambda t: t.get("entry_btc_binary_regime", "unknown")),
+                        "by_btc_descriptive_regime_at_entry": grouped_trades(
                             wf_trades, lambda t: t.get("entry_btc_regime", "unknown")),
                     },
                     "holdout_diagnostics": {
                         "by_symbol": grouped_trades(ho_trades, lambda t: t["symbol"]),
                         "by_exit_reason": grouped_trades(ho_trades, lambda t: t["exit_reason"]),
-                        "by_btc_regime_at_entry": grouped_trades(
+                        "by_btc_binary_regime_at_entry": grouped_trades(
+                            ho_trades, lambda t: t.get("entry_btc_binary_regime", "unknown")),
+                        "by_btc_descriptive_regime_at_entry": grouped_trades(
                             ho_trades, lambda t: t.get("entry_btc_regime", "unknown")),
                     },
                     "yearly": annual,
@@ -302,7 +335,7 @@ def run() -> dict:
         positive_bear_or_sideways_year = any(
             metrics["expectancy_usdt_per_trade"] > 0
             for year in result["yearly"].values()
-            for regime, metrics in year["by_btc_regime_at_entry"].items()
+            for regime, metrics in year["by_btc_descriptive_regime_at_entry"].items()
             if regime in {"bear", "sideways"}
         )
         checks = {
@@ -381,7 +414,7 @@ def run() -> dict:
             "max_drawdown_usdt_lt": CAPITAL * 0.25,
             "calmar_gt_equal_weight_buy_hold": True,
             "positive_expectancy_years_min": 3,
-            "at_least_one_positive_bear_or_sideways_regime_year": True,
+            "at_least_one_positive_bear_or_sideways_regime_year": True,\n            "regime_metrics": "binary BTC above-SMA200 versus below-or-equal-SMA200 at entry; descriptive bull/bear/sideways attribution is additional",
         },
         "strategy_family_overfitting_warning": {
             "distinct_strategy_families_tested_in_project": 4,
@@ -389,7 +422,7 @@ def run() -> dict:
             "warning": "Repeated exploration across four strategy families raises multiple-testing/selection-bias risk. Results are research evidence, not independent confirmation.",
             "holdout_blindness": "The project-level Holdout is not fully blind: prior experiments exposed the project to overlapping historical periods and Holdout outcomes. This run's final 90 days are not an untouched project-level blind test.",
         },
-        "annual_results": {
+        "drawdown_definitions": {\n            "annual_portfolio_drawdown": "mark-to-market portfolio equity drawdown within each UTC close year",\n            "regime_drawdown": "closed-trade cumulative PnL drawdown for trades entered in that BTC regime",\n        },\n        "annual_results": {
             key: value["yearly"] for key, value in scenarios.items()
         },
         "bear_market_years_2018_2022": {
