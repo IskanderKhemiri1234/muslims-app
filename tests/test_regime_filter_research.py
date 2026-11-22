@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
+import types
 from pathlib import Path
 
 import pytest
-import sys
-import types
 
 sys.modules.setdefault("ccxt", types.ModuleType("ccxt"))
 
@@ -46,7 +46,7 @@ def test_only_two_frozen_strategies_are_enabled():
 
 
 def test_missing_candles_are_preserved_and_indicators_reset():
-    data, base = _synthetic_data()
+    data, _base = _synthetic_data()
     rows = data["ETH/USDT"]["4h"]
     # Remove a real candle to create a gap; no synthetic row is inserted.
     rows.pop(10)
