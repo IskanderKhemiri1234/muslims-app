@@ -6,7 +6,7 @@ import json
 import math
 import time
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import regime_filter_research_engine as engine
@@ -14,7 +14,7 @@ from binance_vision_data import (
     ArchiveUnavailable, SYMBOLS, fetch_market_history, gap_count, probe_source,
 )
 
-START_MS = int(datetime(2018, 1, 1, tzinfo=timezone.utc).timestamp() * 1000)
+START_MS = int(datetime(2018, 1, 1, tzinfo=UTC).timestamp() * 1000)
 SPREADS = (0.05, 0.10, 0.15)
 RISK = 0.005
 CAPITAL = 70.0
