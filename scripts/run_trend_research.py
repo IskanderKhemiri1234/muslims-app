@@ -216,11 +216,11 @@ def simulate(
                     if old > 0:
                         scores[symbol] = bar[4] / old - 1.0
                 leaders = set(sorted(scores, key=scores.get, reverse=True)[:2])
-                for symbol in prepared:
+                for symbol, item in prepared.items():
                     if symbol in positions and symbol not in leaders:
-                        prepared[symbol]["pending"] = "sell"
+                        item["pending"] = "sell"
                     elif symbol not in positions and symbol in leaders:
-                        prepared[symbol]["pending"] = "buy"
+                        item["pending"] = "buy"
         else:
             raise ValueError(f"Unknown strategy: {strategy}")
 
