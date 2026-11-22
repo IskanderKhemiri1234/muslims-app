@@ -6,6 +6,7 @@ All thresholds are explicit screening heuristics and must be evaluated out of sa
 
 from __future__ import annotations
 
+import itertools
 import math
 from dataclasses import dataclass
 
@@ -35,7 +36,7 @@ def _true_ranges(candles: list[list[float]]) -> list[float]:
 
 def _efficiency_ratio(closes: list[float], period: int = 20) -> float:
     window = closes[-(period + 1):]
-    path = sum(abs(right - left) for left, right in zip(window, window[1:]))
+    path = sum(abs(right - left) for left, right in itertools.pairwise(window))
     if path <= 0:
         return 0.0
     return abs(window[-1] - window[0]) / path
