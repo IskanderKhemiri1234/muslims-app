@@ -31,7 +31,7 @@ class BinanceMarketData:
         self._ticker_cache = getattr(self, "_ticker_cache", {})
         self._ticker_cache[symbol] = ticker
         price = ticker.get("last")
-        if price is None or float(price) <= 0:
+        if price is None or not math.isfinite(float(price)) or float(price) <= 0:
             raise RuntimeError(f"Invalid last price received for {symbol}.")
         return float(price)
 
