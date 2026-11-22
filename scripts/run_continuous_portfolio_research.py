@@ -350,11 +350,13 @@ def simulate(
             equity_curve.append({"timestamp": ts, "equity": equity, "drawdown": drawdown})
             fold_points[fold_id(ts)].append(equity)
 
-    # Liquidate at the final available close for a conservative, reproducible endpoint.
-    for symbol in list(positions):
-        bar = last_bar.get(symbol)
-        if bar is not None:
-            close(symbol, bar[4], int(bar[0]), "period_end_liquidation")
+    # Historical batch reports liquidate at the endpoint; forward replay keeps positions open
+    # so each scheduled replay does not manufacture an artificial close every four hours.
+    if liquidate_at_end:
+        for symbol in list(positions):
+            bar = last_bar.get(symbol)
+            if bar is not None:
+                close(symbol, bar[4], int(bar[0]), "period_end_liquidation")
 
     end_equity = INITIAL_CAPITAL + realized
     fold_reports = []
@@ -378,6 +380,15 @@ def simulate(
     return {
         "summary": metric_summary(trades, max_dd, first_equity, end_equity),
         "trades": trades, "equity_curve": equity_curve, "folds": fold_reports,
+        "open_positions": [
+            {"symbol": symbol, "opened_at": p["opened_at"], "entry_price": p["entry_fill"],
+             "quantity": p["qty"], "notional_usdt": p["notional"], "stop_price": p["stop"],
+             "unrealized_mark_pnl_usdt": ((last_bar[symbol][4] * (1 - SLIPPAGE_RATE - spread_pct / 200)
+                 - p["entry_fill"]) * p["qty"] - p["entry_fee"]
+                 - last_bar[symbol][4] * (1 - SLIPPAGE_RATE - spread_pct / 200) * p["qty"] * FEE_RATE)
+                 if symbol in last_bar else 0.0}
+            for symbol, p in sorted(positions.items())
+        ],
     }
 
 
