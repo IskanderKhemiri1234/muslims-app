@@ -78,7 +78,7 @@ def _metrics(
     *,
     initial_capital: float,
     max_drawdown_usdt: float,
-) -> dict[str, float | int]:
+) -> dict[str, float | int | None]:
     pnl = [float(trade["net_pnl_usdt"]) for trade in trades]
     wins = [value for value in pnl if value > 0]
     losses = [value for value in pnl if value < 0]
@@ -93,7 +93,7 @@ def _metrics(
         "net_pnl_usdt": sum(pnl),
         "return_pct": (sum(pnl) / initial_capital * 100.0),
         "profit_factor": (gross_profit / gross_loss) if gross_loss else (
-            float("inf") if gross_profit else 0.0
+            None if gross_profit else 0.0
         ),
         "max_drawdown_usdt": max_drawdown_usdt,
         "max_drawdown_pct_of_initial": max_drawdown_usdt / initial_capital * 100.0,
@@ -139,6 +139,7 @@ def run_ema_backtest(
     trades: list[dict[str, Any]] = []
     rejected: Counter[str] = Counter()
     capacity_rejections = 0
+    rejected_candidates = 0
     realized_pnl = 0.0
     peak_equity = cfg.initial_capital_usdt
     max_drawdown = 0.0
@@ -259,7 +260,8 @@ def run_ema_backtest(
             sell_cross = fast[index - 1] >= slow[index - 1] and fast[index] < slow[index]
             if sell_cross and symbol in positions:
                 item["pending"] = "sell"
-            elif not buy_cross or symbol in positions:
+                continue
+            if not buy_cross or symbol in positions:
                 continue
 
             if screened:
@@ -271,6 +273,7 @@ def run_ema_backtest(
                     if int(row[0]) + cfg.context_timeframe_ms <= close_time
                 ]
                 if not closed_hourly:
+                    rejected_candidates += 1
                     rejected["insufficient_multi_timeframe_history"] += 1
                     continue
                 fifteen_history = item["fifteen"][:index + 1]
@@ -289,6 +292,7 @@ def run_ema_backtest(
                     max_spread_pct=cfg.max_spread_pct,
                 )
                 if not decision.accepted:
+                    rejected_candidates += 1
                     rejected.update(decision.reasons)
                     continue
             item["pending"] = "buy"
@@ -322,7 +326,7 @@ def run_ema_backtest(
         max_drawdown_usdt=max_drawdown,
     )
     summary.update({
-        "rejected_candidates": int(sum(rejected.values())),
+        "rejected_candidates": rejected_candidates,
         "rejected_candidate_reasons": dict(rejected),
         "capacity_rejections": capacity_rejections,
         "fees_usdt": total_fees,
@@ -333,14 +337,19 @@ def run_ema_backtest(
     by_symbol: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for trade in trades:
         by_symbol[trade["symbol"]].append(trade)
-    per_symbol = {
-        symbol: _metrics(
+    per_symbol = {}
+    for symbol, symbol_trades in sorted(by_symbol.items()):
+        symbol_equity = peak = cfg.initial_capital_usdt
+        symbol_drawdown = 0.0
+        for trade in sorted(symbol_trades, key=lambda item: item["closed_at"]):
+            symbol_equity += float(trade["net_pnl_usdt"])
+            peak = max(peak, symbol_equity)
+            symbol_drawdown = max(symbol_drawdown, peak - symbol_equity)
+        per_symbol[symbol] = _metrics(
             symbol_trades,
             initial_capital=cfg.initial_capital_usdt,
-            max_drawdown_usdt=0.0,
+            max_drawdown_usdt=symbol_drawdown,
         )
-        for symbol, symbol_trades in sorted(by_symbol.items())
-    }
     return {
         "mode": "ema_with_selection" if screened else "ema_baseline",
         "config": asdict(cfg),
