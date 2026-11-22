@@ -208,8 +208,8 @@ def run() -> dict:
             "fee_note": "0.10% per-side public spot taker assumption; account-specific OKX fee tier is not accessible without account credentials and is not queried.",
         },
         "strategies": {
-            "donchian": "55 completed 4h-bar high breakout; exit below prior 20 completed 4h-bar low; 3x ATR(14) initial stop. No per-asset SMA filter.",
-            "momentum": "Top 2 of the six markets by trailing 90-day return, daily rebalance, 3x ATR(14) initial stop. No per-asset SMA filter.",
+            "donchian": "per-asset daily close>SMA200; 55 completed 4h-bar high breakout; exit below prior 20 completed 4h-bar low or asset regime failure; 3x ATR(14) initial stop.",
+            "momentum": "Top 2 by trailing 90-day return among assets with daily close>SMA200; daily rebalance; 3x ATR(14) initial stop.",
         },
         "regime_filter": "Entry-only global gate: a new position may open only when the last completed BTC daily close is above its daily SMA200. Existing positions exit only under their strategy's ordinary exit rules. SMA200 and all other thresholds are frozen.",
         "annual_and_regime_definition": "Trade-year is the UTC close year. Entry regime is bull when BTC close is >1% above SMA200, bear when >1% below, and sideways within the +/-1% band. This fixed neutral band is descriptive only; the actual entry filter remains strictly close>SMA200.",
