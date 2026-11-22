@@ -220,7 +220,7 @@ def buy_and_hold(data: dict, start_ms: int, end_ms: int, spread_pct: float,
 
 def run() -> dict:
     probe_source()
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(UTC).date()
     data = {}
     data_quality = {}
     for symbol in engine.SYMBOLS:
@@ -229,13 +229,13 @@ def run() -> dict:
         data[symbol] = {"4h": loaded["4h"], "1d": loaded["1d"]}
         data_quality[symbol] = {
             "first_4h_candle_utc": datetime.fromtimestamp(
-                loaded["4h"][0][0] / 1000, timezone.utc).isoformat(),
+                loaded["4h"][0][0] / 1000, UTC).isoformat(),
             "first_1d_candle_utc": datetime.fromtimestamp(
-                loaded["1d"][0][0] / 1000, timezone.utc).isoformat(),
+                loaded["1d"][0][0] / 1000, UTC).isoformat(),
             "last_completed_4h_candle_utc": datetime.fromtimestamp(
-                loaded["4h"][-1][0] / 1000, timezone.utc).isoformat(),
+                loaded["4h"][-1][0] / 1000, UTC).isoformat(),
             "last_completed_1d_candle_utc": datetime.fromtimestamp(
-                loaded["1d"][-1][0] / 1000, timezone.utc).isoformat(),
+                loaded["1d"][-1][0] / 1000, UTC).isoformat(),
             "4h_candle_count": len(loaded["4h"]),
             "1d_candle_count": len(loaded["1d"]),
             "4h_gap_count": gap_count(loaded["4h"], engine.FOUR_HOURS),
@@ -258,8 +258,8 @@ def run() -> dict:
     benchmark_by_spread = {}
     for spread in SPREADS:
         benchmark_by_spread[f"{spread:.2f}"] = {
-            "equal_weight": buy_and_hold(data, wf_start, last_ts, spread, False),
-            "btc_only": buy_and_hold(data, wf_start, last_ts, spread, True),
+            "equal_weight": buy_and_hold(data, wf_start, evaluation_end, spread, False),
+            "btc_only": buy_and_hold(data, wf_start, evaluation_end, spread, True),
         }
     for strategy in ("donchian", "momentum"):
         for use_filter in (False, True):
@@ -382,9 +382,9 @@ def run() -> dict:
             "intervals": ["4h", "1d"],
             "requested_start_utc": "2017-08-01",
             "latest_common_completed_4h_open_utc": datetime.fromtimestamp(
-                last_ts / 1000, timezone.utc).isoformat(),
+                last_ts / 1000, UTC).isoformat(),
             "holdout_start_utc": datetime.fromtimestamp(
-                holdout_start / 1000, timezone.utc).isoformat(),
+                holdout_start / 1000, UTC).isoformat(),
             "per_market": data_quality,
             "no_synthetic_candles": True,
             "gap_policy": "No candles are inserted or forward-filled. Indicators reset at gaps; the frozen simulator exits carried positions at the first observed open after a 4h gap.",
@@ -409,8 +409,8 @@ def run() -> dict:
             "definition": "70 USDT initially allocated equally in dollar terms; each market is bought at its first available 4h open on/after the common evaluation start, so a not-yet-listed market's allocation remains cash until its first candle. Holdings are not rebalanced or sold.",
             "costs": "Entry only: 0.10% commission, 0.05% slippage and half of the scenario round-trip spread. No exit cost is charged because the benchmark remains Buy & Hold.",
             "same_evaluation_period": {
-                "start_utc": datetime.fromtimestamp(wf_start / 1000, timezone.utc).isoformat(),
-                "end_utc": datetime.fromtimestamp((last_ts + engine.FOUR_HOURS) / 1000, timezone.utc).isoformat(),
+                "start_utc": datetime.fromtimestamp(wf_start / 1000, UTC).isoformat(),
+                "end_utc": datetime.fromtimestamp((last_ts + engine.FOUR_HOURS) / 1000, UTC).isoformat(),
             },
             "by_spread": benchmark_by_spread,
         },
