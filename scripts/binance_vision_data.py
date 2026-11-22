@@ -6,6 +6,7 @@ import io
 import urllib.error
 import urllib.request
 import zipfile
+import time
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, date, datetime, timedelta
@@ -39,17 +40,25 @@ def _url(symbol: str, interval: str, period: date, daily: bool = False) -> str:
 
 def _download(url: str) -> bytes | None:
     request = urllib.request.Request(url, headers={"User-Agent": "Iskander-AI-Trader-Research/1.0"})
-    try:
-        with urllib.request.urlopen(request, timeout=45) as response:
-            if response.status != 200:
-                raise ArchiveUnavailable(f"Binance archive HTTP {response.status}: {url}")
-            return response.read()
-    except urllib.error.HTTPError as exc:
-        if exc.code == 404:
-            return None
-        raise ArchiveUnavailable(f"Binance archive HTTP {exc.code}: {url}") from exc
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        raise ArchiveUnavailable(f"Binance archive transport failure for {url}: {exc}") from exc
+    for attempt in range(4):
+        try:
+            with urllib.request.urlopen(request, timeout=45) as response:
+                if response.status != 200:
+                    raise ArchiveUnavailable(f"Binance archive HTTP {response.status}: {url}")
+                return response.read()
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                return None
+            if (exc.code == 429 or 500 <= exc.code < 600) and attempt < 3:
+                time.sleep(2 ** attempt)
+                continue
+            raise ArchiveUnavailable(f"Binance archive HTTP {exc.code}: {url}") from exc
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            if attempt < 3:
+                time.sleep(2 ** attempt)
+                continue
+            raise ArchiveUnavailable(f"Binance archive transport failure for {url}: {exc}") from exc
+    raise ArchiveUnavailable(f"Binance archive retry limit exceeded: {url}")
 
 
 def probe_source() -> None:
@@ -60,9 +69,8 @@ def probe_source() -> None:
         if payload is None:
             raise ArchiveUnavailable(f"Required Binance source probe returned 404: {url}")
         try:
-            with zipfile.ZipFile(io.BytesIO(payload)) as archive:
-                if not archive.namelist():
-                    raise ArchiveUnavailable(f"Empty Binance ZIP archive: {url}")
+            if not _parse_zip(payload, interval, url):
+                raise ArchiveUnavailable(f"Binance archive contains no kline rows: {url}")
         except zipfile.BadZipFile as exc:
             raise ArchiveUnavailable(f"Invalid Binance ZIP archive: {url}") from exc
 
