@@ -60,13 +60,13 @@ def _counts(values):
 
 
 def concentration(trades: list[dict], key_fn) -> float | None:
-    total_positive = sum(max(0.0, t["net_pnl_usdt"]) for t in trades)
-    if total_positive <= 0:
-        return None
     buckets = defaultdict(float)
     for trade in trades:
         buckets[key_fn(trade)] += trade["net_pnl_usdt"]
-    return max((max(0.0, value) for value in buckets.values()), default=0.0) / total_positive
+    positive_total = sum(max(0.0, value) for value in buckets.values())
+    if positive_total <= 0:
+        return None
+    return max((max(0.0, value) for value in buckets.values()), default=0.0) / positive_total
 
 
 def yearly_report(trades: list[dict], points: list[dict]) -> dict:
@@ -127,6 +127,7 @@ def run() -> dict:
                     "strategy": strategy, "btc_sma200_filter": use_filter,
                     "round_trip_spread_pct": spread,
                     "walk_forward": wf, "holdout": ho,
+                    "continuous_30_day_folds": sim["folds"],
                     "walk_forward_diagnostics": grouped(wf_trades, lambda t: t["symbol"]),
                     "holdout_diagnostics": {
                         "by_symbol": grouped(ho_trades, lambda t: t["symbol"]),
@@ -135,8 +136,8 @@ def run() -> dict:
                     },
                     "yearly": year_detail,
                     "concentration": {
-                        "largest_year_share_of_positive_trade_pnl": max_year_share,
-                        "largest_symbol_share_of_positive_trade_pnl": max_symbol_share,
+                        "largest_year_share_of_positive_net_pnl": max_year_share,
+                        "largest_symbol_share_of_positive_net_pnl": max_symbol_share,
                     },
                     "open_positions_at_report_end": sim["open_positions"],
                 }
