@@ -7,6 +7,7 @@ The final locked-rule period is evaluated separately with fresh virtual capital.
 from __future__ import annotations
 
 import argparse
+import bisect
 import json
 import math
 import time
@@ -113,9 +114,10 @@ def rsi_values(values: list[float], period: int = 14) -> list[float]:
     return out
 
 
-def daily_regime(rows: list[list[float]], timestamp: int) -> bool:
-    completed = [r[4] for r in rows if int(r[0]) + ONE_DAY <= timestamp]
-    return len(completed) >= 200 and completed[-1] > sum(completed[-200:]) / 200
+def daily_regime(daily_timestamps: list[int], daily_closes: list[float],
+                 daily_sma200: list[float], timestamp: int) -> bool:
+    idx = bisect.bisect_right(daily_timestamps, timestamp - ONE_DAY) - 1
+    return idx >= 199 and daily_closes[idx] > daily_sma200[idx]
 
 
 def indicators(data: dict[str, dict[str, list[list[float]]]]) -> dict[str, dict[str, Any]]:
@@ -126,6 +128,9 @@ def indicators(data: dict[str, dict[str, list[list[float]]]]) -> dict[str, dict[
         prepared[symbol] = {
             "bars": bars,
             "daily": series["1d"],
+            "daily_timestamps": [int(r[0]) for r in series["1d"]],
+            "daily_closes": [r[4] for r in series["1d"]],
+            "daily_sma200": sma([r[4] for r in series["1d"]], 200),
             "index": {int(r[0]): i for i, r in enumerate(bars)},
             "atr": atr_values(bars),
             "ema20": ema(closes, 20),
@@ -190,17 +195,36 @@ def simulate(
         fees = p["entry_fee"] + exit_fee
         net = gross - fees
         realized += net
+        exit_execution_cost = abs(raw_exit - exit_fill) * p["qty"]
         trade = {
             "symbol": symbol, "opened_at": p["opened_at"], "closed_at": ts,
             "entry_price": p["entry_fill"], "exit_price": exit_fill,
             "quantity": p["qty"], "notional_usdt": p["notional"],
-            "gross_pnl_usdt": gross, "fees_usdt": fees, "net_pnl_usdt": net,
+            "gross_pnl_usdt": gross, "fees_usdt": fees,
+            "entry_execution_cost_usdt": p["entry_execution_cost"],
+            "exit_execution_cost_usdt": exit_execution_cost,
+            "total_costs_usdt": fees + p["entry_execution_cost"] + exit_execution_cost,
+            "net_pnl_usdt": net,
             "exit_reason": reason, "bars_held": max(1, (ts - p["opened_at"]) // FOUR_HOURS),
             "entry_atr_pct": p["entry_atr"] / p["entry_fill"] * 100,
         }
         trades.append(trade)
         if ts >= start_ms:
             fold_trades[fold_id(ts)].append(trade)
+
+    def marked_equity(current_rows: dict[str, tuple[int, list[float]]],
+                      use_open: bool = False) -> float:
+        unrealized = 0.0
+        for sym, pos in positions.items():
+            row = current_rows.get(sym)
+            mark_bar = row[1] if row else last_bar.get(sym)
+            if mark_bar is None:
+                continue
+            raw_mark = mark_bar[1] if use_open and row else mark_bar[4]
+            mark = raw_mark * (1 - SLIPPAGE_RATE - spread_pct / 200)
+            unrealized += ((mark - pos["entry_fill"]) * pos["qty"] -
+                           pos["entry_fee"] - mark * pos["qty"] * FEE_RATE)
+        return INITIAL_CAPITAL + realized + unrealized
 
     for ts in timeline:
         current = {}
@@ -223,7 +247,7 @@ def simulate(
                 atr = item["atr"][idx - 1] if idx else float("nan")
                 if not math.isfinite(atr) or atr <= 0:
                     continue
-                equity = max(0.0, INITIAL_CAPITAL + realized)
+                equity = max(0.0, marked_equity(current, use_open=True))
                 stop_distance = 2.5 * atr if strategy == "pullback" else 3.0 * atr
                 risk_budget = equity * risk_fraction
                 cost_fraction = (stop_distance / bar[1] +
@@ -238,8 +262,9 @@ def simulate(
                 qty = notional / fill
                 positions[symbol] = {
                     "qty": qty, "notional": notional, "entry_fill": fill,
-                    "entry_fee": notional * FEE_RATE, "opened_at": ts,
-                    "stop": bar[1] - stop_distance, "entry_atr": atr,
+                    "entry_fee": notional * FEE_RATE,
+                    "entry_execution_cost": abs(fill - bar[1]) * qty,
+                    "opened_at": ts, "stop": bar[1] - stop_distance, "entry_atr": atr,
                     "highest_close": bar[1],
                 }
 
@@ -260,7 +285,8 @@ def simulate(
                     x = prepared[symbol]
                     if idx < 200 or not math.isfinite(x["atr"][idx]):
                         continue
-                    regime = daily_regime(x["daily"], ts + FOUR_HOURS)
+                    regime = daily_regime(x["daily_timestamps"], x["daily_closes"],
+                                          x["daily_sma200"], ts + FOUR_HOURS)
                     if strategy == "donchian":
                         if idx < 55:
                             continue
@@ -294,7 +320,9 @@ def simulate(
                     scores = {}
                     for symbol, (idx, bar) in current.items():
                         x = prepared[symbol]
-                        if idx < 540 or not daily_regime(x["daily"], ts + FOUR_HOURS):
+                        if idx < 540 or not daily_regime(
+                            x["daily_timestamps"], x["daily_closes"], x["daily_sma200"],
+                            ts + FOUR_HOURS):
                             continue
                         old = x["bars"][idx - 540][4]
                         if old > 0:
@@ -309,16 +337,7 @@ def simulate(
                 raise ValueError(f"Unknown strategy: {strategy}")
 
         # Update mark-to-market portfolio equity and global drawdown continuously.
-        unrealized = 0.0
-        for symbol, p in positions.items():
-            row = current.get(symbol)
-            mark_bar = row[1] if row else last_bar.get(symbol)
-            if mark_bar is None:
-                continue
-            mark = mark_bar[4] * (1 - SLIPPAGE_RATE - spread_pct / 200)
-            unrealized += ((mark - p["entry_fill"]) * p["qty"] -
-                           p["entry_fee"] - mark * p["qty"] * FEE_RATE)
-        equity = INITIAL_CAPITAL + realized + unrealized
+        equity = marked_equity(current)
         peak = max(peak, equity)
         max_dd = max(max_dd, peak - equity)
         if ts >= start_ms:
@@ -366,7 +385,8 @@ def diagnostics(trades: list[dict[str, Any]]) -> dict[str, Any]:
             "net_pnl_usdt": sum(t["net_pnl_usdt"] for t in items),
             "expectancy_usdt": sum(t["net_pnl_usdt"] for t in items) / len(items),
             "gross_pnl_usdt": sum(t["gross_pnl_usdt"] for t in items),
-            "costs_usdt": sum(t["fees_usdt"] for t in items),
+            "commission_costs_usdt": sum(t["fees_usdt"] for t in items),
+            "total_costs_usdt": sum(t["total_costs_usdt"] for t in items),
             "average_bars_held": sum(t["bars_held"] for t in items) / len(items),
         } for name, items in sorted(buckets.items())}
     monthly = []
@@ -378,13 +398,13 @@ def diagnostics(trades: list[dict[str, Any]]) -> dict[str, Any]:
                         "net_pnl_usdt": sum(t["net_pnl_usdt"] for t in items),
                         "expectancy_usdt": sum(t["net_pnl_usdt"] for t in items) / len(items)})
     gross = sum(t["gross_pnl_usdt"] for t in trades)
-    costs = sum(t["fees_usdt"] for t in trades)
+    costs = sum(t["total_costs_usdt"] for t in trades)
     return {
         "by_symbol": group("symbol"),
         "by_exit_reason": group("exit_reason"),
         "monthly": monthly,
         "gross_pnl_usdt": gross,
-        "total_fees_and_execution_costs_usdt": costs,
+        "total_commission_spread_slippage_costs_usdt": costs,
         "cost_drag_pct_of_abs_gross": costs / abs(gross) * 100 if gross else None,
     }
 
