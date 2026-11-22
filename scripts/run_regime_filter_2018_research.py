@@ -74,7 +74,7 @@ def concentration(trades: list[dict], key_fn) -> float | None:
 
 
 def yearly_report(trades: list[dict], points: list[dict]) -> dict:
-    years = sorted({time.strftime("%Y", time.gmtime(t["closed_at"] / 1000)) for t in trades})
+    years = sorted({time.strftime("%Y", time.gmtime(p["timestamp"] / 1000)) for p in points})
     output = {}
     for year in years:
         subset = [t for t in trades if time.strftime("%Y", time.gmtime(t["closed_at"] / 1000)) == year]
@@ -84,9 +84,10 @@ def yearly_report(trades: list[dict], points: list[dict]) -> dict:
         for point in year_points:
             peak = max(peak, point["equity"])
             local_dd = max(local_dd, peak - point["adverse_equity"])
+        year_start = year_points[0]["equity"] if year_points else engine.INITIAL_CAPITAL
+        year_end = year_points[-1]["equity"] if year_points else year_start
         output[year] = {
-            **engine.metric_summary(subset, local_dd, engine.INITIAL_CAPITAL,
-                                    engine.INITIAL_CAPITAL + sum(t["net_pnl_usdt"] for t in subset)),
+            **engine.metric_summary(subset, local_dd, year_start, year_end),
             "btc_regime_at_entry": grouped(subset, lambda t: t.get("entry_btc_regime", "unknown")),
             "by_symbol": grouped(subset, lambda t: t["symbol"]),
             "by_exit_reason": grouped(subset, lambda t: t["exit_reason"]),
