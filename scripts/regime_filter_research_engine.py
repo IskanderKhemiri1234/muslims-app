@@ -21,25 +21,33 @@ STRATEGIES = ("donchian", "momentum")
 def fetch_history(exchange: Any, symbol: str, timeframe: str, since_ms: int) -> list[list[float]]:
     duration = exchange.parse_timeframe(timeframe) * 1000
     cursor = since_ms - since_ms % duration
+    market = exchange.market(symbol)
+    info = market.get("info", {})
+    listing_time = int(info.get("listTime") or 0)
+    if listing_time > cursor:
+        cursor = ((listing_time + duration - 1) // duration) * duration
     rows: dict[int, list[float]] = {}
-    while True:
+    now_ms = int(time.time() * 1000)
+    empty_window = 300 * duration
+    while cursor < now_ms:
         batch = exchange.fetch_ohlcv(symbol, timeframe=timeframe, since=cursor, limit=300)
         if not batch:
-            break
+            cursor += empty_window
+            time.sleep(exchange.rateLimit / 1000)
+            continue
         for row in batch:
             ts = int(row[0])
             if ts >= since_ms:
                 rows[ts] = [float(value) for value in row[:6]]
-        last = int(batch[-1][0])
+        last = max(int(row[0]) for row in batch)
         next_cursor = last + duration
-        if next_cursor <= cursor or len(batch) < 300:
-            break
+        if next_cursor <= cursor:
+            raise ValueError(f"{symbol} {timeframe}: OKX pagination did not advance at {cursor}")
         cursor = next_cursor
         time.sleep(exchange.rateLimit / 1000)
-    now_ms = int(time.time() * 1000)
     result = [rows[k] for k in sorted(rows) if k + duration <= now_ms]
     if len(result) < 2:
-        raise ValueError(f"{symbol} {timeframe}: no usable public history ({len(result)})")
+        raise ValueError(f"{symbol} {timeframe}: no usable public history from listing/start date")
     for row in result:
         ts, o, h, low, close, volume = row
         if int(ts) % duration or any(not math.isfinite(v) for v in row):
@@ -47,7 +55,6 @@ def fetch_history(exchange: Any, symbol: str, timeframe: str, since_ms: int) -> 
         if min(o, h, low, close) <= 0 or volume < 0 or h < max(o, close, low) or low > min(o, close):
             raise ValueError(f"{symbol} {timeframe}: invalid OHLCV")
     return result
-
 
 def sma(values: list[float], period: int) -> list[float]:
     out = [float("nan")] * len(values)
