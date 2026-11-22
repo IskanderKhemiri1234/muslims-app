@@ -55,7 +55,14 @@ class PaperTradingEngine:
     def _close_position(self, symbol: str, market_price: float, reason: str) -> None:
         position = self.state["positions"].pop(symbol)
         quantity = float(position["quantity"])
-        exit_price = market_price * (1.0 - self.settings.slippage_rate)
+        try:
+            spread_pct = self.market_data.fetch_spread_pct(symbol)
+        except Exception:
+            log.exception("Exit spread unavailable for %s; using slippage-only fallback", symbol)
+            spread_pct = 0.0
+        exit_price = market_price * (
+            1.0 - self.settings.slippage_rate - spread_pct / 200.0
+        )
         gross_pnl = (exit_price - float(position["entry_price"])) * quantity
         entry_fee = float(position.get("entry_fee_usdt", 0.0))
         exit_fee = exit_price * quantity * self.settings.taker_fee_rate
@@ -129,10 +136,11 @@ class PaperTradingEngine:
             float(item["entry_price"]) * float(item["quantity"])
             for item in self.state["positions"].values()
         )
-        round_trip_cost_pct = 2.0 * (
-            self.settings.taker_fee_rate + self.settings.slippage_rate
-        ) * 100.0
-        entry_price = price * (1.0 + self.settings.slippage_rate)
+        round_trip_cost_pct = selection.metrics["round_trip_cost_pct"]
+        spread_pct = selection.metrics["spread_pct"]
+        entry_price = price * (
+            1.0 + self.settings.slippage_rate + spread_pct / 200.0
+        )
         decision = size_position(
             price=entry_price, capital_usdt=self.settings.virtual_capital_usdt,
             risk_per_trade_usdt=self.settings.risk_per_trade_usdt,
@@ -161,7 +169,7 @@ class PaperTradingEngine:
         self.state["positions"][symbol] = {
             "entry_price": entry_price, "quantity": decision.quantity,
             "notional_usdt": decision.notional_usdt,
-            "entry_fee_usdt": entry_fee,
+            "entry_fee_usdt": entry_fee, "entry_spread_pct": spread_pct,
             "stop_loss_price": entry_price * (1 - self.settings.stop_loss_pct / 100),
             "take_profit_price": entry_price * (1 + self.settings.take_profit_pct / 100),
             "opened_at": signal.candle_timestamp,
@@ -170,7 +178,8 @@ class PaperTradingEngine:
         self.state["trade_history"].append({
             "symbol": symbol, "side": "buy", "price": entry_price,
             "quantity": decision.quantity, "notional_usdt": decision.notional_usdt,
-            "entry_fee_usdt": entry_fee, "reason": signal.reason,
+            "entry_fee_usdt": entry_fee, "entry_spread_pct": spread_pct,
+            "reason": signal.reason,
             "selection_regime": selection.regime, "opened_at": signal.candle_timestamp,
         })
         self._record_decision(symbol, signal.candle_timestamp, selection)
