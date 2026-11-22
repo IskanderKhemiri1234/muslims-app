@@ -114,7 +114,7 @@ def evaluate_long_candidate(
     chase_atr = abs(entry_price - fast_15m[-1]) / atr if atr > 0 else 999.0
     candle_range = highs[-1] - lows[-1]
     close_location = (closes[-1] - lows[-1]) / candle_range if candle_range > 0 else 0.0
-    round_trip_cost_pct = 2.0 * (taker_fee_rate + slippage_rate) * 100.0
+    round_trip_cost_pct = 2.0 * (taker_fee_rate + slippage_rate) * 100.0 + spread_pct
     net_reward_pct = take_profit_pct - round_trip_cost_pct
     net_risk_pct = stop_loss_pct + round_trip_cost_pct
     net_reward_risk = net_reward_pct / net_risk_pct if net_risk_pct > 0 else 0.0
