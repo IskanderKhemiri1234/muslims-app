@@ -7,3 +7,5 @@ venv/
 *.log
 data/*.json
 !data/.gitkeep
+data/research/
+reports/
