@@ -148,3 +148,22 @@ def test_backtest_rejects_missing_historical_candle_intervals():
 
     with pytest.raises(ValueError, match="missing_candle_gap"):
         run_ema_backtest(datasets, screened=False, config=_config())
+
+
+
+def test_ambiguous_intrabar_bar_assumes_stop_before_target_and_net_pnl_reconciles():
+    datasets = _datasets()
+    ambiguous = datasets["BTC/USDT"]["15m"][6]
+    ambiguous[2] = 20.0
+    ambiguous[3] = 1.0
+
+    result = run_ema_backtest(datasets, screened=False, config=_config())
+    first_trade = result["trades"][0]
+
+    assert first_trade["exit_reason"] == "stop_loss"
+    assert first_trade["net_pnl_usdt"] == pytest.approx(
+        first_trade["gross_pnl_usdt"] - first_trade["fees_usdt"]
+    )
+    assert result["summary"]["net_pnl_usdt"] == pytest.approx(
+        sum(trade["net_pnl_usdt"] for trade in result["trades"])
+    )
