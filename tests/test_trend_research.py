@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import math
 from pathlib import Path
 
 _SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "run_trend_research.py"
@@ -42,7 +43,7 @@ def test_atr_is_unavailable_until_full_lookback_then_positive():
     rows = _daily(20)
     values = atr_values(rows, period=14)
 
-    assert all(value != value for value in values[:13])
+    assert all(math.isnan(value) for value in values[:13])
     assert all(value > 0 for value in values[13:])
 
 
