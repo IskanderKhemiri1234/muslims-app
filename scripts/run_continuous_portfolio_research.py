@@ -215,14 +215,16 @@ def simulate(
             fold_trades[fold_id(ts)].append(trade)
 
     def marked_equity(current_rows: dict[str, tuple[int, list[float]]],
-                      use_open: bool = False) -> float:
+                      use_open: bool = False, use_low: bool = False) -> float:
         unrealized = 0.0
         for sym, pos in positions.items():
             row = current_rows.get(sym)
             mark_bar = row[1] if row else last_bar.get(sym)
             if mark_bar is None:
                 continue
-            raw_mark = mark_bar[1] if use_open and row else mark_bar[4]
+            raw_mark = mark_bar[1] if use_open and row else (
+                mark_bar[3] if use_low and row else mark_bar[4]
+            )
             mark = raw_mark * (1 - SLIPPAGE_RATE - spread_pct / 200)
             unrealized += ((mark - pos["entry_fill"]) * pos["qty"] -
                            pos["entry_fee"] - mark * pos["qty"] * FEE_RATE)
@@ -340,10 +342,12 @@ def simulate(
 
         # Update mark-to-market portfolio equity and global drawdown continuously.
         equity = marked_equity(current)
+        adverse_equity = marked_equity(current, use_low=True)
         peak = max(peak, equity)
-        max_dd = max(max_dd, peak - equity)
+        drawdown = peak - min(equity, adverse_equity)
+        max_dd = max(max_dd, drawdown)
         if ts >= start_ms:
-            equity_curve.append({"timestamp": ts, "equity": equity, "drawdown": peak - equity})
+            equity_curve.append({"timestamp": ts, "equity": equity, "drawdown": drawdown})
             fold_points[fold_id(ts)].append(equity)
 
     # Liquidate at the final available close for a conservative, reproducible endpoint.
