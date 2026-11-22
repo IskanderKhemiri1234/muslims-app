@@ -252,8 +252,10 @@ def simulate(
         # Missing intervals are never filled. Exit carried positions at the first observed open.
         for symbol, (idx, bar) in current.items():
             prior = last_seen.get(symbol)
-            if prior is not None and ts - prior != FOUR_HOURS and symbol in positions:
-                close(symbol, bar[1], ts, "data_gap_exit")
+            if prior is not None and ts - prior != FOUR_HOURS:
+                if symbol in positions:
+                    close(symbol, bar[1], ts, "data_gap_exit")
+                prepared[symbol]["pending"] = None
             last_seen[symbol] = ts
         btc_item = prepared.get("BTC/USDT")
         btc_on = bool(btc_item and daily_regime(
@@ -431,93 +433,3 @@ def diagnostics(trades: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def run_report(data: dict[str, dict[str, list[list[float]]]], since_ms: int,
-               spreads: list[float]) -> dict[str, Any]:
-    prepared = indicators(data)
-    last_ts = min(int(v["4h"][-1][0]) for v in data.values())
-    holdout_start = last_ts - 180 * ONE_DAY
-    wf_start = since_ms + 220 * ONE_DAY
-    scenarios = {}
-    for strategy in STRATEGIES:
-        for risk in (0.005, 0.01):
-            for spread in spreads:
-                # A single uninterrupted portfolio across the entire WF interval.
-                wf = simulate(prepared, strategy, risk, spread, wf_start, holdout_start)
-                # Locked-rule final period, isolated capital and no parameter selection.
-                ho = simulate(prepared, strategy, risk, spread, holdout_start, last_ts)
-                key = f"{strategy}|risk={risk:.3f}|spread={spread:.2f}"
-                scenarios[key] = {
-                    "strategy": strategy, "risk_fraction": risk,
-                    "spread_round_trip_pct": spread,
-                    "walk_forward": wf["summary"], "walk_forward_folds": wf["folds"],
-                    "walk_forward_diagnostics": diagnostics(wf["trades"]),
-                    "holdout": ho["summary"],
-                    "holdout_diagnostics": diagnostics(ho["trades"]),
-                    "acceptance": {
-                        "walk_forward_min_100_trades": wf["summary"]["trades"] >= 100,
-                        "holdout_min_100_trades": ho["summary"]["trades"] >= 100,
-                        "walk_forward_positive_expectancy":
-                            wf["summary"]["expectancy_usdt_per_trade"] > 0,
-                        "holdout_positive_expectancy":
-                            ho["summary"]["expectancy_usdt_per_trade"] > 0,
-                        "continuous_walk_forward_equity": True,
-                    },
-                }
-    return {
-        "provider": "OKX public OHLCV",
-        "markets": SYMBOLS, "timeframe": "4h",
-        "data_start": time.strftime("%Y-%m-%d", time.gmtime(since_ms / 1000)),
-        "last_completed_4h_candle": time.strftime("%Y-%m-%dT%H:%M:%SZ",
-                                                   time.gmtime(last_ts / 1000)),
-        "walk_forward": {
-            "method": "one continuous portfolio; equity, positions, stops and global drawdown carry across 30-day reporting folds",
-            "warmup_days": 220, "fold_days": 30, "capital_usdt": INITIAL_CAPITAL,
-        },
-        "holdout": {
-            "method": "last 180 days; isolated fresh virtual capital; rules frozen before evaluation",
-            "caveat": "This is strategy-specific locked-rule evaluation, not globally unseen market data; the prior research already inspected an overlapping shorter period for other strategies.",
-            "start": time.strftime("%Y-%m-%d", time.gmtime(holdout_start / 1000)),
-        },
-        "strategies": {
-            "donchian": "55-bar high breakout; 20-bar low exit; 3x ATR(14) stop",
-            "momentum": "top 2 of 6 by 90-day return; daily rebalance; daily SMA200 regime gate; 3x ATR(14) stop",
-            "pullback": "daily close>SMA200; 4h EMA50>EMA200; enter next open after close reclaims EMA20 from below with RSI14 45..65; exit below EMA50 or daily regime loss; initial 2.5x ATR stop, then 3x ATR trailing stop from highest completed close",
-        },
-        "execution": {
-            "entry": "next 4h open", "fee_each_side": FEE_RATE,
-            "slippage_each_side": SLIPPAGE_RATE,
-            "spread_scenarios_round_trip_pct": spreads,
-            "max_positions": MAX_POSITIONS, "max_notional_usdt": MAX_NOTIONAL,
-            "risk_scenarios": [0.005, 0.01],
-        },
-        "scenarios": scenarios,
-    }
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--exchange", default="okx")
-    parser.add_argument("--since", default="2023-01-01")
-    parser.add_argument("--spread-values", default="0.05,0.10,0.15")
-    args = parser.parse_args()
-    exchange = getattr(ccxt, args.exchange)({"enableRateLimit": True, "timeout": 30000})
-    since_ms = exchange.parse8601(args.since + "T00:00:00Z")
-    data = {}
-    for symbol in SYMBOLS:
-        print(f"Downloading {symbol} 4h and 1d", flush=True)
-        data[symbol] = {
-            "4h": fetch_history(exchange, symbol, "4h", since_ms),
-            "1d": fetch_history(exchange, symbol, "1d", since_ms),
-        }
-    spreads = [float(v) for v in args.spread_values.split(",")]
-    if spreads != [0.05, 0.10, 0.15]:
-        raise ValueError("Required spread scenarios are exactly 0.05,0.10,0.15")
-    report = run_report(data, since_ms, spreads)
-    Path("reports").mkdir(exist_ok=True)
-    Path("reports/continuous_portfolio_research.json").write_text(
-        json.dumps(report, indent=2, allow_nan=False), encoding="utf-8")
-    print(json.dumps({k: v["acceptance"] for k, v in report["scenarios"].items()}, indent=2))
-
-
-if __name__ == "__main__":
-    main()
