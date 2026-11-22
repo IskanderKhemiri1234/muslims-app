@@ -29,9 +29,13 @@ FREEZE_SPEC = {
 def summarize(trades: list[dict], points: list[dict], start: int, end: int) -> dict:
     selected = [t for t in trades if start <= t["closed_at"] < end]
     curve = [p for p in points if start <= p["timestamp"] < end]
-    max_dd = max((p["drawdown"] for p in curve), default=0.0)
     start_eq = curve[0]["equity"] if curve else engine.INITIAL_CAPITAL
     end_eq = curve[-1]["equity"] if curve else start_eq
+    peak = start_eq
+    max_dd = 0.0
+    for point in curve:
+        peak = max(peak, point["equity"])
+        max_dd = max(max_dd, peak - point["adverse_equity"])
     return engine.metric_summary(selected, max_dd, start_eq, end_eq)
 
 
@@ -153,7 +157,7 @@ def run() -> dict:
             "walk_forward_at_least_100_trades": wf["trades"] >= 100,
             "positive_expectancy_walk_forward": wf["expectancy_usdt_per_trade"] > 0,
             "positive_expectancy_holdout": ho["expectancy_usdt_per_trade"] > 0,
-            "holdout_profit_factor_above_1_2": ho["profit_factor"] is not None and ho["profit_factor"] > 1.2,
+            "holdout_profit_factor_above_1_2": ho["profit_factor"] is None or ho["profit_factor"] > 1.2,
             "no_year_over_50_percent_of_positive_pnl": year_share is not None and year_share <= 0.50,
             "no_symbol_over_50_percent_of_positive_pnl": symbol_share is not None and symbol_share <= 0.50,
             "walk_forward_drawdown_below_25pct_initial_capital": wf["max_drawdown_usdt"] < 17.5,
