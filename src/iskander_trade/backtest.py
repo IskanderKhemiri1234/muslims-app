@@ -230,6 +230,33 @@ def run_ema_backtest(
                     capacity_rejections += 1
                     continue
                 raw_entry = float(candle[1])
+                if screened:
+                    # Re-check the gates at the actual next-open fill price. The
+                    # feature window contains only candles closed before this open.
+                    closed_15m = item["fifteen"][:index]
+                    closed_1h = [
+                        row for row in item["hourly"]
+                        if int(row[0]) + cfg.context_timeframe_ms <= timestamp
+                    ]
+                    if not closed_15m or not closed_1h:
+                        rejected_candidates += 1
+                        rejected["insufficient_multi_timeframe_history"] += 1
+                        continue
+                    decision = evaluate_long_candidate(
+                        closed_15m + [closed_15m[-1]],
+                        closed_1h + [closed_1h[-1]],
+                        entry_price=raw_entry,
+                        stop_loss_pct=cfg.stop_loss_pct,
+                        take_profit_pct=cfg.take_profit_pct,
+                        taker_fee_rate=cfg.taker_fee_rate,
+                        slippage_rate=cfg.slippage_rate,
+                        spread_pct=cfg.assumed_spread_pct,
+                        max_spread_pct=cfg.max_spread_pct,
+                    )
+                    if not decision.accepted:
+                        rejected_candidates += 1
+                        rejected.update(decision.reasons)
+                        continue
                 spread_fraction = cfg.assumed_spread_pct / 100.0
                 entry_fill = raw_entry * (
                     1.0 + cfg.slippage_rate + spread_fraction / 2.0
@@ -298,37 +325,7 @@ def run_ema_backtest(
             if evaluation_start_ms is not None and timestamp + cfg.timeframe_ms < evaluation_start_ms:
                 continue
 
-            if screened:
-                hourly = item["hourly"]
-                # Only use 1h candles fully closed by the 15m signal candle close.
-                close_time = timestamp + cfg.timeframe_ms
-                closed_hourly = [
-                    row for row in hourly
-                    if int(row[0]) + cfg.context_timeframe_ms <= close_time
-                ]
-                if not closed_hourly:
-                    rejected_candidates += 1
-                    rejected["insufficient_multi_timeframe_history"] += 1
-                    continue
-                fifteen_history = item["fifteen"][:index + 1]
-                # The selector's live-data contract excludes its final, forming row.
-                fifteen_input = fifteen_history + [fifteen_history[-1]]
-                hourly_input = closed_hourly + [closed_hourly[-1]]
-                decision = evaluate_long_candidate(
-                    fifteen_input,
-                    hourly_input,
-                    entry_price=float(candle[4]),
-                    stop_loss_pct=cfg.stop_loss_pct,
-                    take_profit_pct=cfg.take_profit_pct,
-                    taker_fee_rate=cfg.taker_fee_rate,
-                    slippage_rate=cfg.slippage_rate,
-                    spread_pct=cfg.assumed_spread_pct,
-                    max_spread_pct=cfg.max_spread_pct,
-                )
-                if not decision.accepted:
-                    rejected_candidates += 1
-                    rejected.update(decision.reasons)
-                    continue
+            # Selection is evaluated at the next candle open using its actual price.
             item["pending"] = "buy"
 
         if evaluation_start_ms is not None and timestamp < evaluation_start_ms:
