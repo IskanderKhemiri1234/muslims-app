@@ -112,12 +112,14 @@ class PaperTradingEngine:
                 take_profit_pct=self.settings.take_profit_pct,
                 taker_fee_rate=self.settings.taker_fee_rate,
                 slippage_rate=self.settings.slippage_rate,
+                spread_pct=self.market_data.fetch_spread_pct(symbol),
+                max_spread_pct=self.settings.max_spread_pct,
             )
         except Exception as exc:
             log.exception("Higher-timeframe selection data unavailable for %s", symbol)
             selection = SelectionDecision(
                 False, "unavailable", ("higher_timeframe_data_unavailable",),
-                {"error": float(len(str(exc)))},
+                {},
             )
         self._record_decision(symbol, signal.candle_timestamp, selection)
         if not selection.accepted:
