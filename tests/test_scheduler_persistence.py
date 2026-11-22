@@ -60,8 +60,7 @@ def test_dashboard_token_compares_supplied_secret(monkeypatch):
         api_module.require_dashboard_token("Bearer " + "b" * 40)
     assert error.value.status_code == 401
 
-def test_dashboard_status_exposes_configured_risk_profile(monkeypatch, tmp_path):
-    monkeypatch.setattr(api_module.settings, "state_path", tmp_path / "paper.json")
+def test_dashboard_status_exposes_configured_risk_profile():
     payload = api_module.status_payload()
 
     assert payload["max_daily_loss_usdt"] == api_module.settings.max_daily_loss_usdt
