@@ -1,4 +1,4 @@
-"""Download public Binance OHLCV and run EMA baseline/screened research validation.
+"""Download public Spot OHLCV and run EMA baseline/screened research validation.
 
 Examples:
   python scripts/run_backtest.py --since 2024-01-01
