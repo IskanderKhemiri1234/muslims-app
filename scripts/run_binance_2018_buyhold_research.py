@@ -286,7 +286,8 @@ def run() -> dict:
                     "walk_forward": wf,
                     "holdout": ho,
                     "full_period": all_metrics,
-                    "full_period_btc_regime_at_entry": regime_all,\n                    "full_period_btc_descriptive_regime_at_entry": descriptive_regime_all,
+                    "full_period_btc_regime_at_entry": regime_all,
+                    "full_period_btc_descriptive_regime_at_entry": descriptive_regime_all,
                     "continuous_30_day_folds": sim["folds"],
                     "walk_forward_diagnostics": {
                         "by_symbol": grouped_trades(wf_trades, lambda t: t["symbol"]),
@@ -413,7 +414,8 @@ def run() -> dict:
             "max_drawdown_usdt_lt": CAPITAL * 0.25,
             "calmar_gt_equal_weight_buy_hold": True,
             "positive_expectancy_years_min": 3,
-            "at_least_one_positive_bear_or_sideways_regime_year": True,\n            "regime_metrics": "binary BTC above-SMA200 versus below-or-equal-SMA200 at entry; descriptive bull/bear/sideways attribution is additional",
+            "at_least_one_positive_bear_or_sideways_regime_year": True,
+            "regime_metrics": "binary BTC above-SMA200 versus below-or-equal-SMA200 at entry; descriptive bull/bear/sideways attribution is additional",
         },
         "strategy_family_overfitting_warning": {
             "distinct_strategy_families_tested_in_project": 4,
@@ -421,7 +423,11 @@ def run() -> dict:
             "warning": "Repeated exploration across four strategy families raises multiple-testing/selection-bias risk. Results are research evidence, not independent confirmation.",
             "holdout_blindness": "The project-level Holdout is not fully blind: prior experiments exposed the project to overlapping historical periods and Holdout outcomes. This run's final 90 days are not an untouched project-level blind test.",
         },
-        "drawdown_definitions": {\n            "annual_portfolio_drawdown": "mark-to-market portfolio equity drawdown within each UTC close year",\n            "regime_drawdown": "closed-trade cumulative PnL drawdown for trades entered in that BTC regime",\n        },\n        "annual_results": {
+        "drawdown_definitions": {
+            "annual_portfolio_drawdown": "mark-to-market portfolio equity drawdown within each UTC close year",
+            "regime_drawdown": "closed-trade cumulative PnL drawdown for trades entered in that BTC regime",
+        },
+        "annual_results": {
             key: value["yearly"] for key, value in scenarios.items()
         },
         "bear_market_years_2018_2022": {
