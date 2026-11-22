@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -35,7 +35,7 @@ def test_scheduler_runs_eight_seconds_after_next_15m_boundary(monkeypatch):
     class FrozenDateTime(datetime):
         @classmethod
         def now(cls, tz=None):
-            return cls(2026, 11, 22, 10, 14, 59, tzinfo=timezone.utc)
+            return cls(2026, 11, 22, 10, 14, 59, tzinfo=UTC)
 
     monkeypatch.setattr(api_module, "datetime", FrozenDateTime)
     assert api_module._seconds_until_next_closed_candle() == pytest.approx(9.0)
