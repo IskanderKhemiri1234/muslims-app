@@ -25,7 +25,7 @@ def fetch_history(exchange: Any, symbol: str, timeframe: str, since_ms: int) -> 
     info = market.get("info", {})
     listing_time = int(info.get("listTime") or 0)
     if listing_time > cursor:
-        cursor = ((listing_time + duration - 1) // duration) * duration
+        cursor = listing_time - listing_time % duration
     rows: dict[int, list[float]] = {}
     now_ms = int(time.time() * 1000)
     empty_window = 300 * duration
