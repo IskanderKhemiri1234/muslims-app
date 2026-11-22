@@ -8,7 +8,7 @@ import os
 import threading
 from contextlib import asynccontextmanager, suppress
 from dataclasses import asdict
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -63,7 +63,7 @@ def _run_one_cycle() -> dict[str, Any]:
 
 def _seconds_until_next_closed_candle() -> float:
     """Run shortly after each UTC 15-minute boundary, never on a forming candle."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     next_minute = ((now.minute // 15) + 1) * 15
     boundary = now.replace(second=0, microsecond=0)
     if next_minute == 60:
