@@ -95,3 +95,21 @@ def test_compare_runs_baseline_and_screened_on_identical_inputs():
     assert result["baseline"]["mode"] == "ema_baseline"
     assert result["screened"]["mode"] == "ema_with_selection"
     assert result["methodology"]["entry"] == "next 15m candle open"
+
+
+
+def test_shared_daily_loss_guard_blocks_new_entries_after_realized_limit():
+    config = BacktestConfig(
+        fast_period=2,
+        slow_period=3,
+        stop_loss_pct=30.0,
+        take_profit_pct=50.0,
+        risk_per_trade_usdt=0.35,
+        max_daily_loss_usdt=0.01,
+        assumed_spread_pct=0.05,
+        max_spread_pct=0.15,
+    )
+    result = run_ema_backtest(_datasets(), screened=False, config=config)
+
+    assert result["summary"]["trades"] == 1
+    assert result["summary"]["daily_loss_rejections"] == 1
