@@ -79,7 +79,7 @@ def test_rejects_costs_that_destroy_net_reward_risk():
 
 
 def test_rejects_unconfirmed_higher_timeframe():
-    fifteen, hourly = _candidate_inputs()
+    fifteen, _hourly = _candidate_inputs()
     bearish = _candles(72, start=120.0, step=-0.2, spread=1.0)
     result = _evaluate(fifteen, bearish)
     assert not result.accepted
