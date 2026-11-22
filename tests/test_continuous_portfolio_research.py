@@ -46,7 +46,7 @@ def test_atr_and_rsi_return_finite_values_after_warmup() -> None:
         rows.append([i * research.FOUR_HOURS, close, close + 2, close - 2, close, 10.0])
     atr = research.atr_values(rows)
     rsi = research.rsi_values([row[4] for row in rows])
-    assert all(value != value for value in atr[:13])
+    assert all(math.isnan(value) for value in atr[:13])
     assert atr[13] == pytest.approx(4.0)
     assert atr[-1] == pytest.approx(4.0)
     assert rsi[14] == pytest.approx(100.0)
