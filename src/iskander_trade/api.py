@@ -1,11 +1,11 @@
-"""Paper-only FastAPI dashboard API designed to tolerate free-tier sleep."""
+"""Paper-only FastAPI dashboard API with an optional continuous worker."""
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
 import hmac
 import logging
 import os
 import threading
+from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
