@@ -37,3 +37,49 @@ def test_paper_cycle_rejects_concurrent_execution(monkeypatch):
         assert exc_info.value.status_code == 409
     finally:
         api_module.cycle_lock.release()
+
+
+def test_continuous_worker_runs_cycles_and_closes_client(monkeypatch):
+    events = []
+
+    class StopAfterOneCycle:
+        def __init__(self):
+            self.stopped = False
+
+        def is_set(self):
+            return self.stopped
+
+        def wait(self, seconds):
+            events.append(("wait", seconds))
+            self.stopped = True
+            return True
+
+        def clear(self):
+            self.stopped = False
+
+    class FakeMarketData:
+        def __init__(self):
+            events.append("client_created")
+
+        def close(self):
+            events.append("client_closed")
+
+    class FakeEngine:
+        def __init__(self, settings, market_data, state):
+            self.state = state
+            events.append("engine_created")
+
+        def run_cycle(self):
+            events.append("cycle_run")
+
+    stop = StopAfterOneCycle()
+    monkeypatch.setattr(api_module, "worker_stop", stop)
+    monkeypatch.setattr(api_module, "BinanceMarketData", FakeMarketData)
+    monkeypatch.setattr(api_module, "PaperTradingEngine", FakeEngine)
+    monkeypatch.setattr(api_module, "load_state", lambda path: {"positions": {}})
+
+    api_module.paper_worker_loop()
+
+    assert "cycle_run" in events
+    assert "client_closed" in events
+    assert ("wait", api_module.settings.poll_seconds) in events
