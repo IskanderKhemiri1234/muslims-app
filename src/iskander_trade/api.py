@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import hmac
+import logging
 import os
 import threading
+from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -19,11 +21,64 @@ from .market_data import BinanceMarketData
 from .ml import train_research_model
 from .state import load_state
 
+log = logging.getLogger("iskander_trade.api")
 settings = Settings()
 settings.validate()
 dashboard_dir = Path(__file__).resolve().parents[2] / "dashboard"
 cycle_lock = threading.Lock()
-app = FastAPI(title="Iskander AI Trade API", version="0.4.0")
+worker_stop = threading.Event()
+worker_thread: threading.Thread | None = None
+
+
+def paper_worker_loop() -> None:
+    """Run the existing paper engine continuously inside the API process."""
+    while not worker_stop.is_set():
+        client: BinanceMarketData | None = None
+        try:
+            client = BinanceMarketData()
+            engine = PaperTradingEngine(settings, client, load_state(settings.state_path))
+            while not worker_stop.is_set():
+                if cycle_lock.acquire(blocking=False):
+                    try:
+                        engine.run_cycle()
+                    except Exception:
+                        log.exception("Background paper cycle failed; the worker will retry.")
+                    finally:
+                        cycle_lock.release()
+                worker_stop.wait(max(settings.poll_seconds, 5))
+        except Exception:
+            log.exception("Paper worker could not initialize; retrying after 15 seconds.")
+            worker_stop.wait(15)
+        finally:
+            if client is not None:
+                client.close()
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    global worker_thread
+    enabled = os.getenv("RUN_PAPER_WORKER", "false").strip().lower() in {"1", "true", "yes"}
+    if enabled:
+        worker_stop.clear()
+        worker_thread = threading.Thread(
+            target=paper_worker_loop,
+            name="iskander-paper-worker",
+            daemon=True,
+        )
+        worker_thread.start()
+        log.warning("Continuous worker started in PAPER mode only.")
+    try:
+        yield
+    finally:
+        if enabled:
+            worker_stop.set()
+            if worker_thread is not None:
+                worker_thread.join(timeout=25)
+                worker_thread = None
+            log.warning("Continuous paper worker stopped.")
+
+
+app = FastAPI(title="Iskander AI Trade API", version="0.5.0", lifespan=lifespan)
 if dashboard_dir.exists():
     app.mount("/assets", StaticFiles(directory=dashboard_dir), name="assets")
 
@@ -40,7 +95,7 @@ def require_dashboard_token(authorization: str | None = Header(default=None)) ->
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"service": settings.app_name, "status": "ok", "mode": "paper",
-            "execution": "manual_cycle_only", "hosting": "free_tier_compatible"}
+            "execution": "continuous_paper_worker" if os.getenv("RUN_PAPER_WORKER", "false").lower() in {"1", "true", "yes"} else "manual_cycle_only", "hosting": "infrlo_candidate"}
 
 
 @app.get("/")
@@ -62,7 +117,7 @@ def status_payload() -> dict[str, Any]:
         "total_realized_pnl_usdt": state.get("total_realized_pnl_usdt", 0.0),
         "positions": state.get("positions", {}),
         "trade_history": state.get("trade_history", [])[-50:],
-        "state_persistence": "ephemeral_free_host_storage",
+        "state_persistence": "local_json_file; back up before redeploying",
     }
 
 
