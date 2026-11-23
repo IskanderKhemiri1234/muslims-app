@@ -2,7 +2,7 @@ name: Iskander AI Trade CI
 
 on:
   push:
-    branches: [main, foundation]
+    branches: [main, foundation, deploy/infrlo-paper-v1]
   pull_request:
     branches: [main]
   workflow_dispatch:
