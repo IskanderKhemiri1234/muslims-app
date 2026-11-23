@@ -18,7 +18,6 @@ from fastapi.staticfiles import StaticFiles
 from .config import Settings
 from .engine import PaperTradingEngine
 from .market_data import BinanceMarketData
-from .ml import train_research_model
 from .state import load_state
 
 log = logging.getLogger("iskander_trade.api")
@@ -162,6 +161,8 @@ def markets() -> dict[str, Any]:
 @app.get("/api/v1/ml/evaluate", dependencies=[Depends(require_dashboard_token)])
 def evaluate_ml() -> dict[str, Any]:
     """Run chronological offline evaluation; output is informational, never a trade signal."""
+    from .ml import train_research_model
+
     client = BinanceMarketData()
     reports: list[dict[str, Any]] = []
     try:
