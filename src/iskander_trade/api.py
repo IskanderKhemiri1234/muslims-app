@@ -1,11 +1,11 @@
 """Paper-only FastAPI dashboard API designed to tolerate free-tier sleep."""
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 import hmac
 import logging
 import os
 import threading
-from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -40,6 +40,7 @@ def paper_worker_loop() -> None:
             while not worker_stop.is_set():
                 if cycle_lock.acquire(blocking=False):
                     try:
+                        engine.state = load_state(settings.state_path)
                         engine.run_cycle()
                     except Exception:
                         log.exception("Background paper cycle failed; the worker will retry.")
