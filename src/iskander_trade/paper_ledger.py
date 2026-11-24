@@ -7,11 +7,11 @@ from __future__ import annotations
 import sqlite3
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_CEILING
+from decimal import ROUND_CEILING, Decimal
 from pathlib import Path
 from typing import Any
 
-ZERO = Decimal("0")
+ZERO = Decimal(0)
 TOLERANCE = Decimal("0.00000002")
 DEFAULT_FEE_RATE = Decimal("0.001")
 FEE_QUANTUM = Decimal("0.00000001")
