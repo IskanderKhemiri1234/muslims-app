@@ -31,7 +31,7 @@ def test_engine_records_multi_cycle_fills_and_restores_ledger(tmp_path, monkeypa
     first = PaperTradingEngine(settings, FakeMarketData(50), state)
     first.run_cycle()
 
-    after_buy = PaperLedger(state_path.with_suffix(".ledger.sqlite3"), Decimal("70"))
+    after_buy = PaperLedger(state_path.with_suffix(".ledger.sqlite3"), Decimal(70))
     buy_report = after_buy.reconcile()
     assert buy_report["status"] == "INCOMPLETE"
     assert Decimal(buy_report["cash"]) == Decimal("52.4825")
