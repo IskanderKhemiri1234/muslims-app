@@ -27,12 +27,12 @@ jobs:
             echo "::error::Add ANDROID_KEYSTORE_BASE64 in repository Actions secrets before requesting a signed release."
             exit 1
           fi
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/iskander-release.jks"
-          test -s "$RUNNER_TEMP/iskander-release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/iskander-release.p12"
+          test -s "$RUNNER_TEMP/iskander-release.p12"
       - name: Build signed release APK
         working-directory: android-app
         env:
-          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/iskander-release.jks
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/iskander-release.p12
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
