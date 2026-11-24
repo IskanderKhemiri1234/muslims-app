@@ -36,9 +36,9 @@ def test_fifo_partial_sell_fees_and_equity_survive_restart(tmp_path):
 
 def test_fill_idempotency_does_not_double_charge(tmp_path):
     ledger = PaperLedger(tmp_path / "idempotent.sqlite3", Decimal(70))
-    args = dict(fill_id="same-fill", symbol="SOL/USDT", side="BUY",
-                quantity=Decimal(1), reference_price=Decimal(20),
-                fill_price=Decimal(20))
+    args = {"fill_id": "same-fill", "symbol": "SOL/USDT", "side": "BUY",
+            "quantity": Decimal(1), "reference_price": Decimal(20),
+            "fill_price": Decimal(20)}
     ledger.record_fill(**args)
     ledger.record_fill(**args)
     portfolio = ledger.portfolio()
