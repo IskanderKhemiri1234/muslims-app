@@ -169,7 +169,7 @@ def markets() -> dict[str, Any]:
         for symbol in settings.watchlist:
             try:
                 rows.append({"symbol": symbol, "price": client.fetch_last_price(symbol)})
-            except Exception as exc:
+            except (ccxt.BaseError, RuntimeError, TypeError, ValueError) as exc:
                 log.warning("Market ticker failed for %s: %s", symbol, exc)
                 rows.append({"symbol": symbol, "error": "Price temporarily unavailable"})
         return {"markets": rows}
