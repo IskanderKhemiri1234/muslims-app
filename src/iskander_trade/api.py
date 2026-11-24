@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import Settings
 from .engine import PaperTradingEngine
 from .market_data import BinanceMarketData
+from .paper_ledger import PaperLedger
 from .state import load_state
 
 log = logging.getLogger("iskander_trade.api")
@@ -119,18 +120,36 @@ def dashboard() -> FileResponse:
 
 def status_payload() -> dict[str, Any]:
     state = load_state(settings.state_path)
+    ledger = PaperLedger(
+        settings.state_path.with_suffix(".ledger.sqlite3"),
+        initial_cash=Decimal(str(settings.virtual_capital_usdt)),
+    )
+    accounting = ledger.reconcile()
+    state_positions = state.get("positions", {})
+    ledger_positions = accounting["open_positions"]
+    if set(state_positions) != set(ledger_positions):
+        accounting["status"] = "FAIL"
+        accounting["issues"].append(
+            "JSON engine positions do not match the independent SQLite ledger."
+        )
     return {
         "mode": "paper",
         "watchlist": list(settings.watchlist),
         "timeframe": settings.timeframe,
         "virtual_capital_usdt": settings.virtual_capital_usdt,
-        "risk_per_trade_usdt": settings.risk_per_trade_usdt,
         "daily_pnl_usdt": state.get("daily_pnl_usdt", 0.0),
-        "total_realized_pnl_usdt": state.get("total_realized_pnl_usdt", 0.0),
-        "positions": state.get("positions", {}),
+        "total_realized_pnl_usdt": float(ledger.portfolio().realized_pnl),
+        "cash_usdt": str(ledger.portfolio().cash),
+        "positions": state_positions,
         "trade_history": state.get("trade_history", [])[-50:],
-        "state_persistence": "local_json_file; back up before redeploying",
+        "accounting": accounting,
+        "state_persistence": "atomic JSON state + durable SQLite FIFO ledger; back up both files",
     }
+
+
+@app.get("/api/v1/accounting", dependencies=[Depends(require_dashboard_token)])
+def accounting_report() -> dict[str, Any]:
+    return status_payload()["accounting"]
 
 
 @app.get("/api/v1/status", dependencies=[Depends(require_dashboard_token)])
