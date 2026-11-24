@@ -1,29 +1,82 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#071c17"><title>Iskander AI Trade</title>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#071c17"><title>Iskander AI Trade</title>
 <style>
-:root{color-scheme:dark;--bg:#071c17;--panel:#0d2a22;--line:#235443;--gold:#d8b66a;--muted:#a9bdb5}
-*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top right,#164b3a,var(--bg) 55%);color:#f5f2e9;font:15px system-ui,sans-serif}
-main{max-width:1100px;margin:auto;padding:24px}.top{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
-h1{font-size:clamp(25px,5vw,38px);margin:0;color:var(--gold)}.muted{color:var(--muted)}
-.panel{background:#0d2a22dd;border:1px solid var(--line);border-radius:18px;padding:18px;margin-top:18px}
-input,button{border:1px solid var(--line);border-radius:10px;padding:12px;background:#061710;color:#fff}button{background:var(--gold);color:#10231b;font-weight:700}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}.metric{font-size:25px;color:var(--gold);font-weight:700}
-table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:11px;border-bottom:1px solid var(--line)}.scroll{overflow:auto}
-</style></head><body><main>
-<div class="top"><div><h1>Iskander AI Trade</h1><div class="muted">Multi-market research · Spot · Paper mode</div></div><div><input id="token" type="password" placeholder="Dashboard token"><button onclick="connect()">Connect</button></div></div>
-<section class="grid"><div class="panel"><div class="muted">Virtual capital</div><div class="metric" id="capital">—</div></div><div class="panel"><div class="muted">Daily paper P/L</div><div class="metric" id="daily">—</div></div><div class="panel"><div class="muted">Total realized P/L</div><div class="metric" id="total">—</div></div><div class="panel"><div class="muted">Open positions</div><div class="metric" id="positions">—</div></div></section>
-<section class="panel"><div class="top"><h2>Paper engine</h2><button onclick="runCycle()">Run one paper cycle</button></div><p class="muted">Manual execution when you open the dashboard. The free host sleeps during inactivity and does not run continuously.</p><p class="muted" id="state-note">Paper state on free hosting may reset after a restart or redeploy. Export important research results yourself.</p></section>
-<section class="panel"><h2>Market watch</h2><div class="scroll"><table><thead><tr><th>Market</th><th>Last price (USDT)</th></tr></thead><tbody id="markets"></tbody></table></div></section>
-<section class="panel"><div class="top"><h2>Machine-learning research</h2><button onclick="evaluateModel()">Run offline evaluation</button></div><p class="muted">Chronological validation against a majority-class baseline. This is not a trade signal.</p><div class="scroll"><table><thead><tr><th>Market</th><th>Samples</th><th>Accuracy</th><th>Baseline</th><th>Assessment</th></tr></thead><tbody id="ml-results"><tr><td colspan="5">Run evaluation to inspect research metrics.</td></tr></tbody></table></div></section>
-<section class="panel"><h2>Recent paper trades</h2><div class="scroll"><table><thead><tr><th>Market</th><th>Side</th><th>Price</th><th>Reason</th></tr></thead><tbody id="trades"></tbody></table></div></section>
-<p class="muted">Research and simulation only. This dashboard cannot submit exchange orders.</p></main>
+:root{color-scheme:dark;--bg:#071c17;--panel:#0d2a22;--line:#285844;--gold:#d8b66a;--muted:#a9bdb5;--good:#78d6a1;--bad:#ff9288}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 90% 0,#1b5740,var(--bg) 52%);color:#f5f2e9;font:15px system-ui,sans-serif}
+main{max-width:1160px;margin:auto;padding:clamp(14px,3vw,28px)}.top{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+h1{font-size:clamp(26px,5vw,40px);margin:0;color:var(--gold)}h2{font-size:19px;margin:0}.muted{color:var(--muted)}.small{font-size:12px}
+.panel{background:linear-gradient(145deg,#103429ed,#0a241ddd);border:1px solid var(--line);border-radius:18px;padding:18px;margin-top:16px;box-shadow:0 12px 32px #0002}
+input,button{border:1px solid var(--line);border-radius:11px;padding:11px 13px;background:#061710;color:#fff;font:inherit}
+button{background:var(--gold);color:#10231b;font-weight:750;cursor:pointer;transition:transform .15s,opacity .15s}
+button:hover:not(:disabled){transform:translateY(-1px)}button:disabled{opacity:.5;cursor:wait}
+button.secondary{background:#12392c;color:#f5f2e9}.button-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.auth{display:grid;gap:8px;min-width:min(100%,310px)}.auth-line{display:flex;gap:7px;flex-wrap:wrap}.auth-line input{flex:1;min-width:150px}
+.remember{display:flex;gap:8px;align-items:center;color:var(--muted);font-size:12px}.remember input{accent-color:var(--gold)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:10px}.metric{font-size:25px;color:var(--gold);font-weight:750;margin-top:5px}
+.panel-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+table{width:100%;border-collapse:collapse;min-width:480px}td,th{text-align:left;padding:11px;border-bottom:1px solid #285844}th{color:var(--gold);font-weight:650}.scroll{overflow:auto}
+.statusbar{display:flex;align-items:center;gap:9px;padding:11px 13px;border-radius:12px;background:#061710;border:1px solid var(--line);margin-top:14px;min-height:44px}
+.dot{width:9px;height:9px;border-radius:50%;background:#8b9b94;flex:none}.dot.busy{background:var(--gold);animation:pulse 1s infinite}.dot.good{background:var(--good)}.dot.bad{background:var(--bad)}
+@keyframes pulse{50%{opacity:.3;transform:scale(.8)}}.spinner{display:inline-block;width:13px;height:13px;border:2px solid #173d2e;border-top-color:currentColor;border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px;margin-right:6px}@keyframes spin{to{transform:rotate(360deg)}}
+.tag{font-size:11px;border:1px solid var(--line);border-radius:99px;padding:5px 9px;color:var(--good)}.foot{padding:18px 2px;color:var(--muted);font-size:12px}
+@media(max-width:560px){.panel{padding:14px}.auth{width:100%}.auth-line button{flex:none}}
+</style>
+</head>
+<body><main>
+<header class="top">
+ <div><h1>Iskander AI Trade</h1><div class="muted">Multi-market research · Spot · Paper mode</div><div class="tag" style="display:inline-block;margin-top:8px">PAPER ONLY · NO LIVE ORDERS</div></div>
+ <div class="auth">
+  <div class="auth-line"><input id="token" type="password" autocomplete="current-password" placeholder="Dashboard access token" aria-label="Dashboard access token"><button id="connectBtn" onclick="connect()">Connect</button></div>
+  <label class="remember"><input id="rememberToken" type="checkbox"> Remember token on this device</label>
+ </div>
+</header>
+<div class="statusbar" role="status" aria-live="polite"><span class="dot" id="statusDot"></span><span id="statusText">Enter your dashboard token and connect.</span><span id="lastUpdated" class="muted small" style="margin-left:auto"></span></div>
+<section class="grid">
+ <div class="panel"><div class="muted">Virtual capital</div><div class="metric" id="capital">—</div></div>
+ <div class="panel"><div class="muted">Daily paper P/L</div><div class="metric" id="daily">—</div></div>
+ <div class="panel"><div class="muted">Total realized P/L</div><div class="metric" id="total">—</div></div>
+ <div class="panel"><div class="muted">Open positions</div><div class="metric" id="positions">—</div></div>
+</section>
+<section class="panel">
+ <div class="panel-head"><h2>Paper engine</h2><div class="button-row"><button class="secondary" id="refreshBtn" onclick="refreshDashboard()">↻ Refresh now</button><button id="cycleBtn" onclick="runCycle()">Run one paper cycle</button></div></div>
+ <p class="muted">Manual paper execution. Refresh remains available while a research or paper task is running.</p>
+ <p class="muted small" id="state-note">Connect to load portfolio status and persistence information.</p>
+</section>
+<section class="panel">
+ <div class="panel-head"><h2>Market watch</h2><button class="secondary" id="marketRefreshBtn" onclick="refreshMarkets()">↻ Update prices</button></div>
+ <div class="scroll"><table><thead><tr><th>Market</th><th>Last price (USDT)</th></tr></thead><tbody id="markets"><tr><td colspan="2">Connect to load markets.</td></tr></tbody></table></div>
+</section>
+<section class="panel">
+ <div class="panel-head"><h2>Machine-learning research</h2><button id="mlBtn" onclick="evaluateModel()">Run offline evaluation</button></div>
+ <p class="muted">Chronological validation against a majority-class baseline. Results are research metrics, not trade signals.</p>
+ <div class="scroll"><table><thead><tr><th>Market</th><th>Samples</th><th>Accuracy</th><th>Baseline</th><th>Assessment</th></tr></thead><tbody id="ml-results"><tr><td colspan="5">No evaluation run yet.</td></tr></tbody></table></div>
+</section>
+<section class="panel"><h2>Recent paper trades</h2><div class="scroll"><table><thead><tr><th>Market</th><th>Side</th><th>Price</th><th>Reason</th></tr></thead><tbody id="trades"><tr><td colspan="4">Connect to load trade history.</td></tr></tbody></table></div></section>
+<footer class="foot">Research and simulation only. This dashboard cannot submit exchange orders. On free hosting, the service may sleep during inactivity; local JSON state may be lost after some restarts or redeployments.</footer>
+</main>
 <script>
-let token="";async function api(path){const r=await fetch(path,{headers:{Authorization:"Bearer "+token}});if(!r.ok)throw Error(await r.text());return r.json()}
-async function connect(){token=document.getElementById("token").value;try{const [s,m]=await Promise.all([api("/api/v1/status"),api("/api/v1/markets")]);
-document.getElementById("capital").textContent=Number(s.virtual_capital_usdt).toFixed(2)+" USDT";document.getElementById("daily").textContent=Number(s.daily_pnl_usdt).toFixed(4)+" USDT";document.getElementById("total").textContent=Number(s.total_realized_pnl_usdt).toFixed(4)+" USDT";document.getElementById("positions").textContent=Object.keys(s.positions).length;document.getElementById("state-note").textContent="State storage: "+s.state_persistence+". Free service restarts may reset paper history.";
-document.getElementById("markets").innerHTML=m.markets.map(x=>"<tr><td>"+x.symbol+"</td><td>"+(x.price??x.error??"—")+"</td></tr>").join("");
-document.getElementById("trades").innerHTML=s.trade_history.slice().reverse().map(x=>"<tr><td>"+x.symbol+"</td><td>"+x.side+"</td><td>"+Number(x.price).toFixed(5)+"</td><td>"+(x.reason??"—")+"</td></tr>").join("")||"<tr><td colspan='4'>No trades yet</td></tr>";
-}catch(e){alert("Connection failed: "+e.message)}}
-async function runCycle(){try{const result=await fetch("/api/v1/paper/cycle",{method:"POST",headers:{Authorization:"Bearer "+token}});if(!result.ok)throw Error(await result.text());await connect();alert("Paper cycle completed.")}catch(e){alert("Paper cycle failed: "+e.message)}}
-async function evaluateModel(){try{const result=await api("/api/v1/ml/evaluate");document.getElementById("ml-results").innerHTML=result.reports.map(x=>"<tr><td>"+x.symbol+"</td><td>"+(x.samples??"—")+"</td><td>"+(x.accuracy===undefined?"—":(x.accuracy*100).toFixed(1)+"%")+"</td><td>"+(x.baseline_accuracy===undefined?"—":(x.baseline_accuracy*100).toFixed(1)+"%")+"</td><td>"+(x.assessment??x.error??"—")+"</td></tr>").join("")}catch(e){alert("ML evaluation failed: "+e.message)}}
+const TOKEN_KEY="iskander_ai_trade_dashboard_token_v1";
+let token="", busyAction="";
+const el=id=>document.getElementById(id);
+function setStatus(message,type="idle"){el("statusText").textContent=message;el("statusDot").className="dot"+(type==="busy"?" busy":type==="good"?" good":type==="bad"?" bad":"")}
+function setBusy(action,on){busyAction=on?action:"";for(const id of ["cycleBtn","mlBtn","connectBtn"]){const b=el(id);b.disabled=!!busyAction&&id!==(action==="connect"?"connectBtn":action==="cycle"?"cycleBtn":"mlBtn");}
+ const target=action==="cycle"?"cycleBtn":action==="ml"?"mlBtn":action==="connect"?"connectBtn":"";if(on&&target){const b=el(target);b.dataset.original=b.textContent;b.innerHTML='<span class="spinner"></span>'+ (action==="cycle"?"Running cycle…":action==="ml"?"Evaluating…":"Connecting…");}else if(target){const b=el(target);b.textContent=b.dataset.original|| (action==="cycle"?"Run one paper cycle":action==="ml"?"Run offline evaluation":"Connect");}}
+function escapeHtml(value){return String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+async function request(path,options={}){const response=await fetch(path,{...options,headers:{Authorization:"Bearer "+token,...(options.headers||{})}});const body=await response.text();let data={};try{data=body?JSON.parse(body):{}}catch{data={detail:body||"Unexpected server response"}}if(!response.ok)throw Error(data.detail||("HTTP "+response.status));return data;}
+function saveTokenChoice(){if(el("rememberToken").checked){try{localStorage.setItem(TOKEN_KEY,token)}catch{setStatus("Browser blocked local token storage. You can still connect for this session.","bad")}}else{try{localStorage.removeItem(TOKEN_KEY)}catch{}}}
+function loadSavedToken(){try{const saved=localStorage.getItem(TOKEN_KEY);if(saved){el("token").value=saved;el("rememberToken").checked=true;}}catch{}}
+function renderPortfolio(s){el("capital").textContent=Number(s.virtual_capital_usdt).toFixed(2)+" USDT";el("daily").textContent=Number(s.daily_pnl_usdt).toFixed(4)+" USDT";el("total").textContent=Number(s.total_realized_pnl_usdt).toFixed(4)+" USDT";el("positions").textContent=Object.keys(s.positions||{}).length;el("state-note").textContent="State storage: "+(s.state_persistence||"status available")+". Back up before redeploying.";
+el("trades").innerHTML=(s.trade_history||[]).slice().reverse().map(x=>"<tr><td>"+escapeHtml(x.symbol)+"</td><td>"+escapeHtml(x.side)+"</td><td>"+Number(x.price).toFixed(5)+"</td><td>"+escapeHtml(x.reason||"—")+"</td></tr>").join("")||"<tr><td colspan='4'>No trades yet</td></tr>";}
+function renderMarkets(m){el("markets").innerHTML=(m.markets||[]).map(x=>"<tr><td>"+escapeHtml(x.symbol)+"</td><td>"+escapeHtml(x.price??x.error??"—")+"</td></tr>").join("")||"<tr><td colspan='2'>No market data returned.</td></tr>";}
+async function connect(){token=el("token").value.trim();if(!token){setStatus("Enter the dashboard access token first.","bad");return}setBusy("connect",true);setStatus("Checking token and loading dashboard data…","busy");try{const [s,m]=await Promise.all([request("/api/v1/status"),request("/api/v1/markets")]);renderPortfolio(s);renderMarkets(m);saveTokenChoice();el("lastUpdated").textContent="Updated "+new Date().toLocaleTimeString();setStatus("Connected. Portfolio and market data are up to date.","good");}catch(e){setStatus("Connection failed: "+e.message,"bad");}finally{setBusy("connect",false)}}
+async function refreshDashboard(){if(!token){setStatus("Connect first to refresh portfolio data.","bad");return}el("refreshBtn").disabled=true;setStatus("Refreshing portfolio…","busy");try{const s=await request("/api/v1/status");renderPortfolio(s);el("lastUpdated").textContent="Updated "+new Date().toLocaleTimeString();setStatus("Portfolio refreshed.","good");}catch(e){setStatus("Refresh failed: "+e.message,"bad");}finally{el("refreshBtn").disabled=false}}
+async function refreshMarkets(){if(!token){setStatus("Connect first to update prices.","bad");return}el("marketRefreshBtn").disabled=true;setStatus("Updating market prices…","busy");try{renderMarkets(await request("/api/v1/markets"));el("lastUpdated").textContent="Updated "+new Date().toLocaleTimeString();setStatus("Market prices updated.","good");}catch(e){setStatus("Price update failed: "+e.message,"bad");}finally{el("marketRefreshBtn").disabled=false}}
+async function runCycle(){if(!token){setStatus("Connect before running a paper cycle.","bad");return}setBusy("cycle",true);setStatus("Paper cycle running: requesting market candles and checking configured markets…","busy");try{const result=await request("/api/v1/paper/cycle",{method:"POST"});if(result.portfolio)renderPortfolio(result.portfolio);await refreshMarkets();el("lastUpdated").textContent="Completed "+new Date().toLocaleTimeString();setStatus("Paper cycle completed successfully. No live orders were sent.","good");}catch(e){setStatus("Paper cycle failed: "+e.message,"bad");}finally{setBusy("cycle",false)}}
+async function evaluateModel(){if(!token){setStatus("Connect before starting ML evaluation.","bad");return}setBusy("ml",true);el("ml-results").innerHTML="<tr><td colspan='5'>Evaluation is running. You can refresh portfolio and market prices meanwhile.</td></tr>";setStatus("ML evaluation running market by market. This can take a little time on the free host…","busy");try{const result=await request("/api/v1/ml/evaluate");el("ml-results").innerHTML=(result.reports||[]).map(x=>"<tr><td>"+escapeHtml(x.symbol)+"</td><td>"+escapeHtml(x.samples??"—")+"</td><td>"+(x.accuracy===undefined?"—":(x.accuracy*100).toFixed(1)+"%")+"</td><td>"+(x.baseline_accuracy===undefined?"—":(x.baseline_accuracy*100).toFixed(1)+"%")+"</td><td>"+escapeHtml(x.assessment??x.error??"—")+"</td></tr>").join("")||"<tr><td colspan='5'>No reports returned.</td></tr>";setStatus("ML evaluation finished. Review each market against its baseline; this is not a trade signal.","good");}catch(e){el("ml-results").innerHTML="<tr><td colspan='5'>"+escapeHtml(e.message)+"</td></tr>";setStatus("ML evaluation failed: "+e.message,"bad");}finally{setBusy("ml",false)}}
+el("rememberToken").addEventListener("change",()=>{if(!el("rememberToken").checked){try{localStorage.removeItem(TOKEN_KEY)}catch{}setStatus("Saved token removed from this browser.","idle")}else if(token){saveTokenChoice();setStatus("Token will be remembered on this device.","good")}});
+el("token").addEventListener("keydown",event=>{if(event.key==="Enter")connect()});
+loadSavedToken();
 </script></body></html>
