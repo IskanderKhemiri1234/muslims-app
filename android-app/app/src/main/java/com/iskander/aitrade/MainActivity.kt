@@ -178,6 +178,11 @@ class MainActivity : Activity() {
         row(portfolio, "Daily net P/L", field(s, "daily_pnl_usdt") + " USDT")
         row(portfolio, "Realized net P/L", field(s, "total_realized_pnl_usdt") + " USDT")
         row(portfolio, "Open positions", (s.optJSONObject("positions")?.length() ?: 0).toString())
+        val snapshot = s.optJSONObject("accounting") ?: JSONObject()
+        val marksComplete = snapshot.optBoolean("equity_includes_unrealized", false)
+        row(portfolio, "Market value", if (marksComplete) field(snapshot, "market_value") + " USDT" else "Unavailable")
+        row(portfolio, "Unrealized net P/L", if (marksComplete) field(snapshot, "unrealized_pnl") + " USDT" else "Unavailable")
+        row(portfolio, "Portfolio equity", if (marksComplete) field(snapshot, "equity") + " USDT" else "Incomplete")
 
         marketList.removeAllViews(); marketList.addView(label("Market watch", 17f, gold))
         val ms = m.optJSONArray("markets") ?: JSONArray()
