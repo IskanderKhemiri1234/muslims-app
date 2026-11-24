@@ -1,6 +1,12 @@
 name: Iskander AI Trade Signed Android Release
 
 on:
+  push:
+    branches:
+      - deploy/infrlo-paper-v1
+    paths:
+      - '.github/workflows/android-release.yml'
+      - 'android-app/**'
   workflow_dispatch:
 
 permissions:
@@ -26,7 +32,7 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
-            echo "::error::Repair ANDROID_KEYSTORE_BASE64 from the validated private signing file before requesting a signed release."
+            echo "::error::ANDROID_KEYSTORE_BASE64 is missing."
             exit 1
           fi
           test -n "$ANDROID_KEYSTORE_PASSWORD"
