@@ -3,6 +3,8 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+val releaseStorePath = System.getenv("ANDROID_KEYSTORE_PATH")
+
 android {
     namespace = "com.iskander.aitrade"
     compileSdk = 35
@@ -19,5 +21,23 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.2.0"
+    }
+
+    signingConfigs {
+        create("release") {
+            if (!releaseStorePath.isNullOrBlank()) {
+                storeFile = file(releaseStorePath)
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
+        }
     }
 }
