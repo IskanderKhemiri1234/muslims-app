@@ -31,12 +31,11 @@ class PaperTradingEngine:
             raise RuntimeError("Paper ledger reconciliation failed; trading cycle blocked.")
         ledger_positions = audit["open_positions"]
         state_positions = state.get("positions", {})
-        if set(ledger_positions) != set(state_positions):  # noqa: SIM102
-            if ledger_positions or state_positions:
-                raise RuntimeError(
-                    "Legacy JSON positions do not match the FIFO ledger; manual reconciliation "
-                    "is required before another paper cycle."
-                )
+        if set(ledger_positions) != set(state_positions) and (ledger_positions or state_positions):
+            raise RuntimeError(
+                "Legacy JSON positions do not match the FIFO ledger; manual reconciliation "
+                "is required before another paper cycle."
+            )
         for symbol, position in state_positions.items():
             if abs(Decimal(str(position["quantity"])) -
                    Decimal(ledger_positions[symbol]["quantity"])) > Decimal("0.00000002"):
