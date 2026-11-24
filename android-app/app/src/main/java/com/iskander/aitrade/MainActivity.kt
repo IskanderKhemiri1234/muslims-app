@@ -143,6 +143,9 @@ class MainActivity : Activity() {
     private fun number(value: Double, digits: Int) =
         String.format(Locale.US, "%." + digits + "f", value)
 
+    private fun field(obj: JSONObject, key: String): String =
+        if (!obj.has(key) || obj.isNull(key)) "—" else obj.opt(key)?.toString() ?: "—"
+
     private fun dashboard(s: JSONObject, m: JSONObject) {
         root = layout()
         val scroll = ScrollView(this)
@@ -171,16 +174,16 @@ class MainActivity : Activity() {
     private fun render(s: JSONObject, m: JSONObject) {
         portfolio.removeAllViews(); portfolio.addView(label("Portfolio", 17f, gold))
         row(portfolio, "Virtual capital", number(s.optDouble("virtual_capital_usdt", 70.0), 2) + " USDT")
-        row(portfolio, "Available cash", s.optString("cash_usdt", "—") + " USDT")
-        row(portfolio, "Daily net P/L", number(s.optDouble("daily_pnl_usdt"), 4) + " USDT")
-        row(portfolio, "Realized net P/L", number(s.optDouble("total_realized_pnl_usdt"), 4) + " USDT")
+        row(portfolio, "Available cash", field(s, "cash_usdt") + " USDT")
+        row(portfolio, "Daily net P/L", field(s, "daily_pnl_usdt") + " USDT")
+        row(portfolio, "Realized net P/L", field(s, "total_realized_pnl_usdt") + " USDT")
         row(portfolio, "Open positions", (s.optJSONObject("positions")?.length() ?: 0).toString())
 
         marketList.removeAllViews(); marketList.addView(label("Market watch", 17f, gold))
         val ms = m.optJSONArray("markets") ?: JSONArray()
         for (i in 0 until ms.length()) {
             val item = ms.optJSONObject(i) ?: continue
-            row(marketList, item.optString("symbol"), item.optString("price", item.optString("error", "—")))
+            row(marketList, field(item, "symbol"), if (item.has("error")) field(item, "error") else field(item, "price"))
         }
 
         positionList.removeAllViews(); positionList.addView(label("Open positions", 17f, gold))
@@ -188,7 +191,7 @@ class MainActivity : Activity() {
         val keys = ps.keys(); var found = false
         while (keys.hasNext()) {
             found = true; val symbol = keys.next(); val p = ps.optJSONObject(symbol) ?: JSONObject()
-            row(positionList, symbol, "Qty " + number(p.optDouble("quantity"), 6) + " @ " + number(p.optDouble("entry_price"), 5))
+            row(positionList, symbol, "Qty " + field(p, "quantity") + " @ " + field(p, "entry_price"))
         }
         if (!found) positionList.addView(label("No open positions.", 12f, muted))
 
@@ -196,19 +199,27 @@ class MainActivity : Activity() {
         val a = s.optJSONObject("accounting") ?: JSONObject()
         val result = a.optString("status", "UNAVAILABLE")
         row(auditList, "Reconciliation", result, if (result == "PASS") green else if (result == "FAIL") red else gold)
-        row(auditList, "Cash / expected", a.optString("cash", "—") + " / " + a.optString("expected_cash", "—"))
-        row(auditList, "Fees paid", a.optString("fees_paid", "—"))
-        row(auditList, "FIFO realized P/L", a.optString("fifo_realized_pnl", "—"))
+        row(auditList, "Cash / expected", field(a, "cash") + " / " + field(a, "expected_cash"))
+        row(auditList, "Fees paid", field(a, "fees_paid"))
+        row(auditList, "FIFO realized P/L", field(a, "fifo_realized_pnl"))
         val issues = a.optJSONArray("issues") ?: JSONArray()
         for (i in 0 until issues.length()) auditList.addView(label("• " + issues.optString(i), 12f, red))
-        if (issues.length() == 0) auditList.addView(label("No accounting mismatch reported.", 12f, muted))
+        if (issues.length() == 0) {
+            val summary = when (result) {
+                "PASS" -> "All available accounting checks passed."
+                "INCOMPLETE" -> "Accounting is incomplete: one or more required market marks are unavailable."
+                "FAIL" -> "Accounting failed. Review the server ledger before another cycle."
+                else -> "Accounting report unavailable. Do not assume balances are reconciled."
+            }
+            auditList.addView(label(summary, 12f, if (result == "FAIL") red else muted))
+        }
 
         tradeList.removeAllViews(); tradeList.addView(label("Recent paper trades", 17f, gold))
         val history = s.optJSONArray("trade_history") ?: JSONArray()
         if (history.length() == 0) tradeList.addView(label("No trades yet.", 12f, muted))
         for (i in (history.length() - 1 downTo maxOf(0, history.length() - 10))) {
             val t = history.optJSONObject(i) ?: continue
-            row(tradeList, t.optString("symbol") + " · " + t.optString("side"), number(t.optDouble("price"), 5))
+            row(tradeList, field(t, "symbol") + " · " + field(t, "side"), field(t, "price"))
         }
     }
 
