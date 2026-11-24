@@ -1,5 +1,9 @@
 name: Iskander AI Trade Android APK
 
+concurrency:
+  group: iskander-android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   workflow_dispatch:
   push:
