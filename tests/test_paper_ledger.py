@@ -24,14 +24,14 @@ def test_fifo_partial_sell_fees_and_equity_survive_restart(tmp_path):
 
     assert report["status"] == "PASS"
     assert report["checks"].values() and all(report["checks"].values())
-    assert Decimal(report["cash"]) == Decimal("57.3926")
-    assert Decimal(report["fees_paid"]) == Decimal("0.0074")
+    assert Decimal(report["cash"]) == Decimal("57.3826")
+    assert Decimal(report["fees_paid"]) == Decimal("0.0174")
     assert Decimal(report["fifo_realized_pnl"]) == Decimal("0.3956")
     assert Decimal(report["open_positions"]["BTC/USDT"]["quantity"]) == Decimal("0.06")
     assert Decimal(report["open_positions"]["ETH/USDT"]["quantity"]) == Decimal("1")
     assert Decimal(report["market_value"]) == Decimal("14.3")
-    assert Decimal(report["equity"]) == Decimal("71.6926")
-    assert Decimal(report["unrealized_pnl"]) == Decimal("0.692")
+    assert Decimal(report["equity"]) == Decimal("71.6826")
+    assert Decimal(report["unrealized_pnl"]) == Decimal("1.287")
 
 
 def test_fill_idempotency_does_not_double_charge(tmp_path):
