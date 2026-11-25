@@ -149,6 +149,12 @@ class BinanceSpotExecution:
         formatted = Decimal(self.exchange.amount_to_precision(normalized, float(qty)))
         if formatted <= 0:
             raise OrderValidationError("Order rounds to zero at Binance precision.")
+        ticker = self.exchange.fetch_ticker(normalized)
+        reference_price = ticker.get("last")
+        if reference_price is None:
+            raise OrderValidationError("Cannot validate market-order notional without a current price.")
+        if formatted * Decimal(str(reference_price)) > self.settings.max_order_quote:
+            raise OrderValidationError("Market order exceeds MAX_ORDER_QUOTE_USDT.")
         limits = market.get("limits") or {}
         minimum = (limits.get("amount") or {}).get("min")
         if minimum is not None and formatted < Decimal(str(minimum)):
