@@ -172,6 +172,15 @@ class BinanceSpotExecution:
             None, normalized, {"origClientOrderId": client_order_id}
         )
 
+    def cancel_order_by_client_id(
+        self, client_order_id: str, symbol: str
+    ) -> dict[str, Any]:
+        current = self.fetch_order_by_client_id(client_order_id, symbol)
+        exchange_order_id = current.get("id")
+        if not exchange_order_id or current.get("status") not in {"open", "partially_filled"}:
+            return current
+        return self.exchange.cancel_order(str(exchange_order_id), symbol.strip().upper())
+
     def fetch_my_trades_for_order(
         self, symbol: str, exchange_order_id: str, since: int | None = None
     ) -> list[dict[str, Any]]:
