@@ -19,10 +19,10 @@ from pydantic import BaseModel, Field
 
 from .config import Settings
 from .engine import PaperTradingEngine
+from .live_execution import ExecutionDisabled
 from .market_data import BinanceMarketData
 from .paper_ledger import PaperLedger
 from .state import load_state
-from .live_execution import ExecutionDisabled
 from .testnet_trade_service import TestnetTradeService
 
 log = logging.getLogger("iskander_trade.api")
