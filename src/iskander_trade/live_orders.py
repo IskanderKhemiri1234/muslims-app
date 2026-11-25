@@ -50,6 +50,10 @@ class LiveManualOrderService:
                 CREATE TABLE IF NOT EXISTS live_flags(
                     name TEXT PRIMARY KEY, value TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS live_balances(
+                    asset TEXT PRIMARY KEY, free TEXT NOT NULL, used TEXT NOT NULL,
+                    total TEXT NOT NULL, observed_at TEXT NOT NULL
+                );
                 INSERT OR IGNORE INTO live_flags(name,value) VALUES('manual_armed','0');
             """)
             cols = {row["name"] for row in db.execute("PRAGMA table_info(live_orders)")}
@@ -100,12 +104,13 @@ class LiveManualOrderService:
                 "SELECT * FROM live_fills ORDER BY occurred_at DESC LIMIT 200"
             )]
             positions = [dict(r) for r in db.execute("SELECT * FROM live_positions")]
+            balances = [dict(r) for r in db.execute("SELECT * FROM live_balances ORDER BY asset")]
             utc_day = datetime.now(UTC).date().isoformat()
-            pnl = db.execute(
-                "SELECT COALESCE(SUM(CAST(realized_pnl_quote AS REAL)),0) AS pnl "
-                "FROM live_fills WHERE substr(occurred_at,1,10)=?",
+            pnl_rows = db.execute(
+                "SELECT realized_pnl_quote FROM live_fills WHERE substr(occurred_at,1,10)=?",
                 (utc_day,),
-            ).fetchone()["pnl"]
+            ).fetchall()
+            pnl = sum((Decimal(r["realized_pnl_quote"]) for r in pnl_rows), Decimal(0))
         return {
             "mode": "binance_spot_live",
             "manual_only": True,
@@ -114,6 +119,7 @@ class LiveManualOrderService:
             "orders": orders,
             "fills": fills,
             "positions": positions,
+            "balances": balances,
             "daily_realized_pnl_quote": str(pnl),
             "orders_enabled": self._armed() and not self.control.stopped(),
         }
@@ -134,10 +140,11 @@ class LiveManualOrderService:
                 "SELECT COUNT(*) AS n FROM live_orders WHERE status IN ('intent','open','partially_filled','unknown')"
             ).fetchone()["n"]
             day = datetime.now(UTC).date().isoformat()
-            daily_pnl = Decimal(str(db.execute(
-                "SELECT COALESCE(SUM(CAST(realized_pnl_quote AS REAL)),0) AS pnl "
-                "FROM live_fills WHERE substr(occurred_at,1,10)=?", (day,)
-            ).fetchone()["pnl"]))
+            pnl_rows = db.execute(
+                "SELECT realized_pnl_quote FROM live_fills WHERE substr(occurred_at,1,10)=?",
+                (day,),
+            ).fetchall()
+            daily_pnl = sum((Decimal(r["realized_pnl_quote"]) for r in pnl_rows), Decimal(0))
         if open_count >= max_open_orders:
             raise LiveOrderError("Maximum number of open Live orders reached.")
         if side == "buy" and daily_pnl <= -max_daily_loss:
@@ -172,6 +179,8 @@ class LiveManualOrderService:
             if adapter.settings.testnet or not adapter.settings.live_enabled:
                 raise ExecutionDisabled("The adapter is not configured for Spot Live.")
             normalized = symbol.strip().upper()
+            if not normalized.endswith("/USDT"):
+                raise LiveOrderError("This Live risk ledger currently accepts USDT-quoted Spot pairs only.")
             reference = Decimal(str(price)) if price else adapter.fetch_last_price(normalized)
             qty = Decimal(str(amount))
             self._risk_gate(normalized, side, qty, reference)
@@ -207,6 +216,21 @@ class LiveManualOrderService:
                 order = adapter.create_market_order(normalized, side, qty, client_id)
             self._save_order(client_id, order)
             self._sync_fills(adapter, client_id, normalized, order)
+            balances = adapter.fetch_balance()
+            with self._connect() as db:
+                for asset, values in balances.items():
+                    if not isinstance(values, dict):
+                        continue
+                    if not any(values.get(key) is not None for key in ("free", "used", "total")):
+                        continue
+                    db.execute(
+                        """INSERT INTO live_balances(asset,free,used,total,observed_at)
+                           VALUES(?,?,?,?,?) ON CONFLICT(asset) DO UPDATE SET
+                           free=excluded.free,used=excluded.used,total=excluded.total,
+                           observed_at=excluded.observed_at""",
+                        (asset, str(values.get("free") or "0"), str(values.get("used") or "0"),
+                         str(values.get("total") or "0"), datetime.now(UTC).isoformat()),
+                    )
             return self.status()
         finally:
             adapter.close()
@@ -257,10 +281,14 @@ class LiveManualOrderService:
                 old_amount = Decimal(position["amount"]) if position else Decimal(0)
                 old_avg = Decimal(position["average_entry"]) if position else Decimal(0)
                 realized = Decimal(0)
+                base_asset, quote_asset = symbol.split("/", maxsplit=1)
                 if order.get("side") == "buy":
-                    new_amount = old_amount + amount
+                    net_amount = amount - fee_cost if fee_currency == base_asset else amount
+                    if net_amount <= 0:
+                        raise LiveOrderError("Buy fill commission consumed the entire base quantity.")
+                    new_amount = old_amount + net_amount
                     quote_cost = old_amount * old_avg + amount * price
-                    if fee_currency == symbol.split("/")[1]:
+                    if fee_currency == quote_asset:
                         quote_cost += fee_cost
                     avg = quote_cost / new_amount if new_amount else Decimal(0)
                     db.execute(
@@ -271,12 +299,13 @@ class LiveManualOrderService:
                         (symbol, str(new_amount), str(avg), datetime.now(UTC).isoformat()),
                     )
                 elif order.get("side") == "sell":
-                    if amount > old_amount:
-                        raise LiveOrderError("Exchange sell fill exceeds locally journaled Spot position.")
-                    realized = amount * (price - old_avg)
-                    if fee_currency == symbol.split("/")[1]:
-                        realized -= fee_cost
-                    remaining = old_amount - amount
+                    base_fee = fee_cost if fee_currency == base_asset else Decimal(0)
+                    quote_fee = fee_cost if fee_currency == quote_asset else Decimal(0)
+                    debited_amount = amount + base_fee
+                    if debited_amount > old_amount:
+                        raise LiveOrderError("Exchange sell fill and base commission exceed locally journaled Spot position.")
+                    realized = amount * (price - old_avg) - quote_fee - (base_fee * old_avg)
+                    remaining = old_amount - debited_amount
                     if remaining == 0:
                         db.execute("DELETE FROM live_positions WHERE symbol=?", (symbol,))
                     else:
@@ -320,7 +349,7 @@ class LiveManualOrderService:
                 raise ExecutionDisabled("The adapter is not configured for Spot Live.")
             with self._connect() as db:
                 pending = [dict(r) for r in db.execute(
-                    "SELECT * FROM live_orders WHERE status IN ('intent','open','partially_filled','unknown')"
+                    "SELECT * FROM live_orders ORDER BY created_at DESC LIMIT 1000"
                 )]
             for row in pending:
                 try:
