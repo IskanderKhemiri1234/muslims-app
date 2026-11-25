@@ -127,6 +127,11 @@ class TradeJournal:
                     total TEXT NOT NULL,
                     observed_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS cycle_leases (
+                    lease_key TEXT PRIMARY KEY,
+                    owner_id TEXT NOT NULL,
+                    expires_at REAL NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS audit_events (
                     event_id INTEGER PRIMARY KEY AUTOINCREMENT,
                     trade_id TEXT,
@@ -146,6 +151,38 @@ class TradeJournal:
                 "INSERT OR IGNORE INTO system_flags(flag,value,updated_at) VALUES('emergency_stop','1',?)",
                 (_now(),),
             )
+
+    def acquire_cycle_lease(
+        self, owner_id: str, *, lease_key: str = "binance_testnet_monitor",
+        ttl_seconds: int = 300,
+    ) -> bool:
+        if not owner_id or ttl_seconds < 30:
+            raise ValueError("A lease owner and at least 30 seconds TTL are required.")
+        now = datetime.now(UTC).timestamp()
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            cursor = db.execute(
+                """INSERT INTO cycle_leases(lease_key,owner_id,expires_at)
+                   VALUES(?,?,?)
+                   ON CONFLICT(lease_key) DO UPDATE SET
+                     owner_id=excluded.owner_id, expires_at=excluded.expires_at
+                   WHERE cycle_leases.expires_at <= ? OR cycle_leases.owner_id = ?""",
+                (lease_key, owner_id, now + ttl_seconds, now, owner_id),
+            )
+            acquired = cursor.rowcount == 1
+            db.commit()
+            return acquired
+
+    def release_cycle_lease(
+        self, owner_id: str, *, lease_key: str = "binance_testnet_monitor"
+    ) -> None:
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            db.execute(
+                "DELETE FROM cycle_leases WHERE lease_key=? AND owner_id=?",
+                (lease_key, owner_id),
+            )
+            db.commit()
 
     def emergency_stopped(self) -> bool:
         with self._connect() as db:
