@@ -104,3 +104,13 @@ def reconcile_live_orders() -> dict[str, Any]:
     except Exception as exc:
         log.exception("Live order reconciliation failed.")
         raise HTTPException(status_code=502, detail="Live reconciliation failed; unresolved orders remain blocked.") from exc
+
+@router.post("/orders/{client_order_id}/cancel", dependencies=[Depends(_require_dashboard_token)])
+def cancel_manual_live_order(client_order_id: str) -> dict[str, Any]:
+    try:
+        return orders.cancel(client_order_id)
+    except (LiveOrderError, ExecutionDisabled, OrderValidationError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        log.exception("Manual Live cancellation failed.")
+        raise HTTPException(status_code=502, detail="Cancellation outcome uncertain; reconcile before retrying.") from exc
