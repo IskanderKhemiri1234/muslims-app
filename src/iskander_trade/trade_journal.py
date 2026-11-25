@@ -109,6 +109,13 @@ class TradeJournal:
                     value TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS account_balances (
+                    asset TEXT PRIMARY KEY,
+                    free TEXT NOT NULL,
+                    used TEXT NOT NULL,
+                    total TEXT NOT NULL,
+                    observed_at TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS audit_events (
                     event_id INTEGER PRIMARY KEY AUTOINCREMENT,
                     trade_id TEXT,
@@ -307,9 +314,35 @@ class TradeJournal:
                 "SELECT * FROM orders WHERE status IN ('intent','open','partially_filled')"
             ).fetchall()]
 
+    def save_balance_snapshot(self, balances: dict[str, Any]) -> None:
+        now = _now()
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            for asset, values in balances.items():
+                if not isinstance(values, dict):
+                    continue
+                free = str(values.get("free") or 0)
+                used = str(values.get("used") or 0)
+                total = str(values.get("total") or 0)
+                db.execute(
+                    """INSERT INTO account_balances(asset,free,used,total,observed_at)
+                       VALUES(?,?,?,?,?) ON CONFLICT(asset) DO UPDATE SET
+                       free=excluded.free,used=excluded.used,total=excluded.total,
+                       observed_at=excluded.observed_at""",
+                    (asset, free, used, total, now),
+                )
+            db.execute(
+                "INSERT INTO audit_events(event_type,detail_json,occurred_at) VALUES(?,?,?)",
+                ("account_balances_synced", json.dumps({"assets": len(balances)}), now),
+            )
+            db.commit()
+
     def snapshot(self) -> dict[str, Any]:
         with self._connect() as db:
             return {
+                "balances": [dict(r) for r in db.execute(
+                    "SELECT * FROM account_balances ORDER BY asset"
+                )],
                 "trades": [dict(r) for r in db.execute(
                     "SELECT * FROM trade_configs ORDER BY created_at DESC"
                 )],
