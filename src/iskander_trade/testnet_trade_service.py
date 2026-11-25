@@ -27,6 +27,7 @@ class TestnetTradeService:
             journal_path or os.getenv("TRADE_JOURNAL_PATH", "data/trades.sqlite3")
         )
         self._cycle_lock = threading.Lock()
+        self._lease_lost = threading.Event()
 
     @staticmethod
     def _execution() -> BinanceSpotExecution:
@@ -94,17 +95,40 @@ class TestnetTradeService:
             raise RuntimeError("A Testnet monitor cycle is already running.")
         owner_id = uuid.uuid4().hex
         lease_acquired = False
+        lease_stop = threading.Event()
+        heartbeat: threading.Thread | None = None
         try:
             lease_acquired = self.journal.acquire_cycle_lease(owner_id)
             if not lease_acquired:
                 raise RuntimeError(
                     "Another Testnet monitor process owns the durable cycle lease."
                 )
+
+            self._lease_lost.clear()
+
+            def renew_lease() -> None:
+                while not lease_stop.wait(30):
+                    if not self.journal.renew_cycle_lease(owner_id, ttl_seconds=300):
+                        self._lease_lost.set()
+                        log.error("Testnet cycle lease was lost; new orders are blocked.")
+                        return
+
+            heartbeat = threading.Thread(
+                target=renew_lease, name="iskander-testnet-lease-heartbeat", daemon=True
+            )
+            heartbeat.start()
             return self._run_cycle()
         finally:
+            lease_stop.set()
+            if heartbeat is not None:
+                heartbeat.join(timeout=2)
             if lease_acquired:
                 self.journal.release_cycle_lease(owner_id)
             self._cycle_lock.release()
+
+    def _assert_lease(self) -> None:
+        if self._lease_lost.is_set():
+            raise RuntimeError("Durable Testnet cycle lease was lost; order submission is blocked.")
 
     def _run_cycle(self) -> dict[str, Any]:
         stopped = self.journal.emergency_stopped()
@@ -270,11 +294,13 @@ class TestnetTradeService:
                                 base_asset,
                             )
                             continue
+                        self._assert_lease()
                         client_id = self.journal.create_order_intent(
                             trade_id=trade["trade_id"], symbol=symbol, side="sell",
                             amount=amount, price=None, order_type="market",
                         )
                         # Intent is durable before the exchange call.
+                        self._assert_lease()
                         order = adapter.create_market_order(symbol, "sell", amount, client_id)
                         self.journal.update_order(client_id, order)
                         exchange_order_id = str(order.get("id") or "")
@@ -301,10 +327,12 @@ class TestnetTradeService:
                             quote_asset,
                         )
                         continue
+                    self._assert_lease()
                     client_id = self.journal.create_order_intent(
                         trade_id=trade["trade_id"], symbol=symbol, side="buy",
                         amount=trade["quantity"], price=trade["entry_price"],
                     )
+                    self._assert_lease()
                     order = adapter.create_limit_order(
                         symbol, "buy", trade["quantity"], trade["entry_price"], client_id
                     )
