@@ -1,6 +1,7 @@
 package com.iskander.aitrade
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
@@ -13,6 +14,7 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
+import java.util.UUID
 import java.util.concurrent.Executors
 
 class MainActivity : Activity() {
@@ -36,6 +38,13 @@ class MainActivity : Activity() {
     private lateinit var auditList: LinearLayout
     private lateinit var tradeList: LinearLayout
     private lateinit var testnetState: TextView
+    private lateinit var liveState: TextView
+    private lateinit var liveOrdersText: TextView
+    private lateinit var liveSymbol: EditText
+    private lateinit var liveAmount: EditText
+    private lateinit var livePrice: EditText
+    private lateinit var liveSide: Spinner
+    private lateinit var liveType: Spinner
     private lateinit var tradeSymbol: EditText
     private lateinit var tradeQuantity: EditText
     private lateinit var tradeEntry: EditText
@@ -173,6 +182,7 @@ class MainActivity : Activity() {
         positionList = section("Open positions"); body.addView(positionList, params())
         auditList = section("Accounting integrity"); body.addView(auditList, params())
         tradeList = section("Recent paper trades"); body.addView(tradeList, params())
+        body.addView(livePanel(), params())
         val controls = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         controls.addView(makeButton("Refresh") { refresh() }, LinearLayout.LayoutParams(0, dp(50), 1f))
         cycle = makeButton("Run paper cycle") { runCycle() }
@@ -303,6 +313,140 @@ class MainActivity : Activity() {
         testnetState = label("Testnet journal not loaded. Emergency stop defaults to ACTIVE.", 12f, gold)
         box.addView(testnetState, params())
         return box
+    }
+
+
+    private fun livePanel(): LinearLayout {
+        val box = section("Binance Spot · Manual Live")
+        box.addView(label("REAL MONEY · MANUAL ORDERS ONLY · NO AUTOMATIC STRATEGY", 12f, red), params())
+        box.addView(label("Live keys stay on the server. Emergency stop defaults ON. Orders are sent only after explicit review and confirmation.", 12f, muted), params())
+        liveSymbol = decimalField("Pair, e.g. BTC/USDT").apply { setText("BTC/USDT"); inputType = 1 }
+        liveAmount = decimalField("Base quantity")
+        livePrice = decimalField("Limit price (required for LIMIT)")
+        liveSide = Spinner(this).apply {
+            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, listOf("BUY", "SELL"))
+        }
+        liveType = Spinner(this).apply {
+            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, listOf("LIMIT", "MARKET"))
+        }
+        box.addView(liveSymbol, params())
+        box.addView(liveSide, params())
+        box.addView(liveType, params())
+        box.addView(liveAmount, params())
+        box.addView(livePrice, params())
+        box.addView(makeButton("Refresh Live orders and fills") { refreshLiveState() }, params())
+        box.addView(makeButton("Arm manual Live") { liveAction("/api/v1/live/arm", "Manual Live armed. No order has been sent.") }, params())
+        box.addView(makeButton("Disarm manual Live") { liveAction("/api/v1/live/disarm", "Manual Live disarmed.") }, params())
+        box.addView(makeButton("Release Live emergency stop") {
+            AlertDialog.Builder(this).setTitle("Release emergency stop?")
+                .setMessage("This only releases the stop latch. Manual trading remains disarmed.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Release") { _, _ -> liveAction("/api/v1/live/emergency-stop/release", "Live stop released; still disarmed.") }
+                .show()
+        }, params())
+        box.addView(makeButton("EMERGENCY STOP") {
+            AlertDialog.Builder(this).setTitle("EMERGENCY STOP")
+                .setMessage("Disarm manual Live and block new real-money orders immediately?")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("STOP") { _, _ -> liveAction("/api/v1/live/emergency-stop", "Live emergency stop is active.") }
+                .show()
+        }, params())
+        box.addView(makeButton("Review and submit REAL order") { reviewLiveOrder() }, params())
+        box.addView(makeButton("Reconcile Live orders") { liveAction("/api/v1/live/reconcile", "Reconciliation request completed; verify journal.") }, params())
+        liveState = label("Live state not loaded. Emergency stop is expected to be ACTIVE.", 12f, gold)
+        box.addView(liveState, params())
+        liveOrdersText = label("No Live order journal loaded.", 12f, muted)
+        box.addView(liveOrdersText, params())
+        return box
+    }
+
+    private fun liveAction(path: String, success: String) {
+        worker.execute {
+            try {
+                api(path, "POST")
+                val state = api("/api/v1/live/orders")
+                ui.post { renderLiveState(state); notice.text = success; notice.setTextColor(green) }
+            } catch (e: Exception) {
+                ui.post { liveState.text = "Live control failed: " + e.message; liveState.setTextColor(red) }
+            }
+        }
+    }
+
+    private fun refreshLiveState() {
+        worker.execute {
+            try {
+                val state = api("/api/v1/live/orders")
+                ui.post { renderLiveState(state) }
+            } catch (e: Exception) {
+                ui.post { liveState.text = "Live refresh failed: " + e.message; liveState.setTextColor(red) }
+            }
+        }
+    }
+
+    private fun renderLiveState(state: JSONObject) {
+        val stopped = state.optBoolean("emergency_stop", true)
+        val armed = state.optBoolean("manual_armed", false)
+        liveState.text = "Spot Live · Emergency stop: " + (if (stopped) "ACTIVE" else "released") +
+            " · Manual armed: " + armed + " · Daily realized P/L: " +
+            state.optString("daily_realized_pnl_quote", "—")
+        liveState.setTextColor(if (stopped) gold else if (armed) red else green)
+        val orders = state.optJSONArray("orders") ?: JSONArray()
+        val lines = (0 until orders.length()).mapNotNull { i ->
+            orders.optJSONObject(i)?.let { o ->
+                o.optString("symbol") + " · " + o.optString("side") + " " +
+                    o.optString("order_type") + " · " + o.optString("filled") +
+                    "/" + o.optString("amount") + " · " + o.optString("status") +
+                    " · " + o.optString("client_order_id")
+            }
+        }
+        liveOrdersText.text = if (lines.isEmpty()) "No Live orders recorded." else lines.joinToString("\n")
+    }
+
+    private fun reviewLiveOrder() {
+        val symbol = liveSymbol.text.toString().trim()
+        val amount = liveAmount.text.toString().trim()
+        val price = livePrice.text.toString().trim()
+        val side = if (liveSide.selectedItemPosition == 0) "buy" else "sell"
+        val type = if (liveType.selectedItemPosition == 0) "limit" else "market"
+        if (symbol.isBlank() || amount.isBlank() || (type == "limit" && price.isBlank())) {
+            liveState.text = "Enter pair, quantity and limit price when using LIMIT."
+            liveState.setTextColor(red); return
+        }
+        val summary = "REAL BINANCE SPOT ORDER\n" + side.uppercase(Locale.US) + " " +
+            type.uppercase(Locale.US) + "\n" + symbol + " · quantity " + amount +
+            if (type == "limit") " · limit " + price else " · market price"
+        AlertDialog.Builder(this)
+            .setTitle("Confirm real-money order")
+            .setMessage(summary + "\n\nThis order can execute immediately and use real funds.")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Submit REAL order") { _, _ ->
+                val requestId = UUID.randomUUID().toString()
+                val payload = JSONObject().apply {
+                    put("request_id", requestId)
+                    put("symbol", symbol)
+                    put("side", side)
+                    put("order_type", type)
+                    put("amount", amount)
+                    if (type == "limit") put("price", price) else put("price", JSONObject.NULL)
+                }
+                worker.execute {
+                    try {
+                        api("/api/v1/live/orders", "POST", payload = payload)
+                        val state = api("/api/v1/live/orders")
+                        ui.post {
+                            renderLiveState(state)
+                            notice.text = "Order request recorded. Verify exchange order and fills."
+                            notice.setTextColor(green)
+                        }
+                    } catch (e: Exception) {
+                        ui.post {
+                            liveState.text = "Order result uncertain or rejected: " + e.message +
+                                ". Reconcile before any retry."
+                            liveState.setTextColor(red)
+                        }
+                    }
+                }
+            }.show()
     }
 
     private fun refreshTestnetState() {
