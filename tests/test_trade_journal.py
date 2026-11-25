@@ -168,3 +168,49 @@ def test_fill_journal_survives_restart_and_keeps_distinct_commissions(tmp_path):
     fills = restored.snapshot()["fills"]
     assert {item["fill_key"] for item in fills} == {f"{client_id}:t1", f"{client_id}:t2"}
     assert sum(Decimal(item["fee_cost"]) for item in fills) == Decimal("0.000005")
+
+
+def test_sell_fill_records_gross_realized_pnl_and_closes_position(tmp_path):
+    journal = TradeJournal(tmp_path / "journal.sqlite3")
+    trade = journal.create_trade(
+        symbol="BTC/USDT", quantity="0.01", entry_price="60000",
+        stop_loss_price="58000", take_profit_price="65000",
+    )
+    buy_id = journal.create_order_intent(
+        trade_id=trade["trade_id"], symbol="BTC/USDT", side="buy",
+        amount="0.01", price="60000",
+    )
+    journal.update_order(buy_id, {
+        "id": "buy-1", "filled": "0.01", "remaining": "0",
+        "average": "60000", "status": "closed",
+    })
+    sell_id = journal.create_order_intent(
+        trade_id=trade["trade_id"], symbol="BTC/USDT", side="sell",
+        amount="0.01", price=None, order_type="market",
+    )
+    journal.update_order(sell_id, {
+        "id": "sell-1", "filled": "0.01", "remaining": "0",
+        "average": "65000", "status": "closed",
+    })
+    snapshot = journal.snapshot()
+    assert snapshot["positions"][0]["amount"] == "0"
+    assert Decimal(snapshot["realizations"][0]["gross_pnl"]) == Decimal("50")
+
+
+def test_sell_fill_cannot_create_short_spot_position(tmp_path):
+    from iskander_trade.trade_journal import JournalError
+
+    journal = TradeJournal(tmp_path / "journal.sqlite3")
+    trade = journal.create_trade(
+        symbol="BTC/USDT", quantity="0.01", entry_price="60000",
+        stop_loss_price="58000", take_profit_price="65000",
+    )
+    sell_id = journal.create_order_intent(
+        trade_id=trade["trade_id"], symbol="BTC/USDT", side="sell",
+        amount="0.01", price=None, order_type="market",
+    )
+    with pytest.raises(JournalError, match="position"):
+        journal.update_order(sell_id, {
+            "id": "sell-early", "filled": "0.01", "remaining": "0",
+            "average": "61000", "status": "closed",
+        })
