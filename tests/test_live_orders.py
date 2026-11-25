@@ -93,7 +93,7 @@ def test_daily_loss_blocks_buys_but_does_not_block_manual_sell_exit(tmp_path, mo
         assert False, "daily loss gate must block new buys"
     except LiveOrderError:
         pass
-    service._risk_gate("BTC/USDT", "sell", Decimal("0.1"), Decimal("100"))
+    service._risk_gate("BTC/USDT", "sell", Decimal("0.1"), Decimal(100))
 
 
 def test_repeated_client_request_id_is_not_submitted_again(tmp_path, monkeypatch):
