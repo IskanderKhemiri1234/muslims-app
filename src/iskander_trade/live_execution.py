@@ -42,7 +42,7 @@ class ExecutionSettings:
     allowed_symbols: frozenset[str]
 
     @classmethod
-    def from_env(cls) -> "ExecutionSettings":
+    def from_env(cls) -> ExecutionSettings:
         symbols = frozenset(
             item.strip().upper()
             for item in os.getenv("BINANCE_ALLOWED_SYMBOLS", "").split(",")
