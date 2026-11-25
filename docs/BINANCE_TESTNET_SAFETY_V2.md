@@ -34,3 +34,18 @@ This is a deterministic accounting primitive. It is not yet the production journ
 ## Deployment
 
 Do not deploy this branch to SillyDev until CI is green and its deployment source/branch is explicitly set to this branch. Do not replace the existing Paper folder or its data in-place.
+
+## SillyDev Testnet environment checklist
+
+Configure these values only in the SillyDev server's private environment/secret settings, never in Git, dashboard HTML, issue comments, or chat:
+
+- `BINANCE_API_KEY`: Binance Spot Testnet key only.
+- `BINANCE_API_SECRET`: matching Spot Testnet secret only.
+- `BINANCE_TESTNET=true`.
+- `ENABLE_LIVE_TRADING=false`.
+- `BINANCE_ALLOWED_SYMBOLS`: explicit comma-separated Spot pairs approved for Testnet.
+- `MAX_ORDER_QUOTE_USDT`: small Testnet notional ceiling.
+- `TRADE_JOURNAL_PATH`: a path on persistent server storage, not a temporary/cache directory.
+- `RUN_BINANCE_TESTNET_WORKER=false` until authenticated preflight and manual bounded cycle are validated.
+
+Never configure production Binance credentials for this stage. The dashboard token is separate from Binance credentials. Confirm the server's environment settings without printing secret values.
