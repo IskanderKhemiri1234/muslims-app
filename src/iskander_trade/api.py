@@ -12,10 +12,10 @@ from pathlib import Path
 from typing import Any
 
 import ccxt
-from pydantic import BaseModel, Field
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 
 from .config import Settings
 from .engine import PaperTradingEngine
