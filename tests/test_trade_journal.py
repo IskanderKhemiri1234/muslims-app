@@ -143,3 +143,26 @@ def test_terminal_canceled_order_is_available_for_restart_reconciliation(tmp_pat
     restored = TradeJournal(tmp_path / "journal.sqlite3")
     assert restored.recent_orders()[0]["status"] == "canceled"
     assert restored.pending_orders() == []
+
+
+def test_fill_journal_survives_restart_and_keeps_distinct_commissions(tmp_path):
+    path = tmp_path / "journal.sqlite3"
+    journal = TradeJournal(path)
+    trade = journal.create_trade(
+        symbol="BTC/USDT", quantity="0.01", entry_price="60000",
+        stop_loss_price="58000", take_profit_price="65000",
+    )
+    client_id = journal.create_order_intent(
+        trade_id=trade["trade_id"], symbol="BTC/USDT", side="buy",
+        amount="0.01", price="60000",
+    )
+    journal.record_fills(client_id, [
+        {"id": "t1", "amount": "0.003", "price": "60000",
+         "fee": {"cost": "0.000003", "currency": "BTC"}},
+        {"id": "t2", "amount": "0.002", "price": "60010",
+         "fee": {"cost": "0.000002", "currency": "BTC"}},
+    ])
+    restored = TradeJournal(path)
+    fills = restored.snapshot()["fills"]
+    assert {item["fill_key"] for item in fills} == {f"{client_id}:t1", f"{client_id}:t2"}
+    assert sum(Decimal(item["fee_cost"]) for item in fills) == Decimal("0.000005")
