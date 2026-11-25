@@ -22,7 +22,8 @@ from .engine import PaperTradingEngine
 from .market_data import BinanceMarketData
 from .paper_ledger import PaperLedger
 from .state import load_state
-from .live_execution import ExecutionDisabled\nfrom .testnet_trade_service import TestnetTradeService
+from .live_execution import ExecutionDisabled
+from .testnet_trade_service import TestnetTradeService
 
 log = logging.getLogger("iskander_trade.api")
 settings = Settings()
