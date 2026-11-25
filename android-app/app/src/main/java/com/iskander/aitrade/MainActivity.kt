@@ -81,10 +81,10 @@ class MainActivity : Activity() {
     private fun login() {
         root = layout().apply { gravity = Gravity.CENTER_VERTICAL }
         root.addView(label("ISKANDER AI TRADE", 27f, gold))
-        root.addView(label("Native paper trading command center", 14f, muted).apply {
+        root.addView(label("Paper · Testnet · Manual Spot Live command center", 14f, muted).apply {
             setPadding(0, dp(8), 0, dp(18))
         })
-        root.addView(label("PAPER ONLY  •  NO LIVE ORDERS", 12f, green))
+        root.addView(label("MANUAL LIVE  •  DISARMED BY DEFAULT", 12f, green))
         urlField = EditText(this).apply {
             hint = "https://your-paper-api.example"; setSingleLine(true); setText(baseUrl)
             setTextColor(Color.WHITE); setHintTextColor(muted); background = panel()
@@ -190,7 +190,7 @@ class MainActivity : Activity() {
         controls.addView(cycle, LinearLayout.LayoutParams(0, dp(50), 1f))
         body.addView(controls, params())
         body.addView(makeButton("Disconnect") { token = ""; login() }, params())
-        body.addView(label("Public market data · Authenticated account · Paper execution only", 11f, muted), params())
+        body.addView(label("Paper · Testnet · Manual Spot Live (separately armed)", 11f, muted), params())
         scroll.addView(body); root.addView(scroll); setContentView(root)
         render(s, m)
         refreshLiveState()
