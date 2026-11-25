@@ -593,6 +593,23 @@ class TradeJournal:
                     "quote_asset": ledger.quote_asset,
                     "realized_quote_pnl": str(ledger.realized_quote_pnl),
                 })
+            exchange_totals = {
+                row["asset"]: Decimal(row["total"])
+                for row in db.execute("SELECT asset,total FROM account_balances")
+            }
+            required_base: dict[str, Decimal] = {}
+            for position in positions:
+                asset = str(position["symbol"]).split("/", maxsplit=1)[0]
+                required_base[asset] = required_base.get(asset, Decimal(0)) + Decimal(
+                    str(position["amount"])
+                )
+            balance_issues = [
+                f"Exchange total {asset} balance {exchange_totals.get(asset, Decimal(0))} "
+                f"is below bot-ledger inventory {required}."
+                for asset, required in required_base.items()
+                if exchange_totals.get(asset, Decimal(0)) < required
+            ]
+
             # Legacy/test-only rows without trade-history records remain visible as
             # provisional positions, but the mismatch above blocks automated action.
             trades_with_fills = set(fills_by_trade)
@@ -623,6 +640,7 @@ class TradeJournal:
                 "gross_realized_pnl": str(gross_realized),
                 "net_realized_quote_pnl": net_realized,
                 "accounting_issues": accounting_issues,
+                "balance_issues": balance_issues,
                 "positions": positions,
                 "emergency_stop": self.emergency_stopped(),
             }
