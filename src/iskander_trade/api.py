@@ -22,7 +22,7 @@ from .engine import PaperTradingEngine
 from .market_data import BinanceMarketData
 from .paper_ledger import PaperLedger
 from .state import load_state
-from .testnet_trade_service import TestnetTradeService
+from .live_execution import ExecutionDisabled\nfrom .testnet_trade_service import TestnetTradeService
 
 log = logging.getLogger("iskander_trade.api")
 settings = Settings()
@@ -183,6 +183,18 @@ def status_payload() -> dict[str, Any]:
         "state_persistence": "atomic JSON state + durable SQLite FIFO ledger; back up both files",
     }
 
+
+
+@app.get("/api/v1/testnet/preflight", dependencies=[Depends(require_dashboard_token)])
+def testnet_preflight() -> dict[str, Any]:
+    try:
+        return testnet_service.preflight()
+    except (ExecutionDisabled, ccxt.BaseError, RuntimeError, ValueError) as exc:
+        log.exception("Binance Spot Testnet preflight failed.")
+        raise HTTPException(
+            status_code=502,
+            detail="Binance Spot Testnet connection failed. Check server configuration and logs.",
+        ) from exc
 
 
 @app.get("/api/v1/testnet/trades", dependencies=[Depends(require_dashboard_token)])
