@@ -35,6 +35,12 @@ class MainActivity : Activity() {
     private lateinit var positionList: LinearLayout
     private lateinit var auditList: LinearLayout
     private lateinit var tradeList: LinearLayout
+    private lateinit var testnetState: TextView
+    private lateinit var tradeSymbol: EditText
+    private lateinit var tradeQuantity: EditText
+    private lateinit var tradeEntry: EditText
+    private lateinit var tradeStop: EditText
+    private lateinit var tradeTarget: EditText
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -235,6 +241,100 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun decimalField(hintText: String) = EditText(this).apply {
+        hint = hintText
+        setSingleLine(true)
+        inputType = 8194
+        setTextColor(Color.WHITE)
+        setHintTextColor(muted)
+        background = panel()
+    }
+
+    private fun testnetPanel(): LinearLayout {
+        val box = section("Binance Spot Testnet · Sandbox only")
+        box.addView(label("Configure a pair, entry, quantity, stop-loss and take-profit. Saving does not arm the trade.", 12f, muted), params())
+        tradeSymbol = decimalField("Pair, e.g. BTC/USDT").apply { setText("BTC/USDT"); inputType = 1 }
+        tradeQuantity = decimalField("Quantity")
+        tradeEntry = decimalField("Entry price")
+        tradeStop = decimalField("Stop-loss price")
+        tradeTarget = decimalField("Take-profit price")
+        for (field in listOf(tradeSymbol, tradeQuantity, tradeEntry, tradeStop, tradeTarget)) {
+            box.addView(field, params())
+        }
+        box.addView(makeButton("Save Testnet trade settings") {
+            val payload = JSONObject().apply {
+                put("symbol", tradeSymbol.text.toString().trim())
+                put("quantity", tradeQuantity.text.toString().trim())
+                put("entry_price", tradeEntry.text.toString().trim())
+                put("stop_loss_price", tradeStop.text.toString().trim())
+                put("take_profit_price", tradeTarget.text.toString().trim())
+            }
+            performTestnet("/api/v1/testnet/trades", payload)
+        }, params())
+        box.addView(makeButton("Refresh Testnet balances and journal") {
+            refreshTestnetState()
+        }, params())
+        box.addView(makeButton("Run Testnet monitor cycle") {
+            performTestnet("/api/v1/testnet/cycle")
+        }, params())
+        box.addView(makeButton("Arm first saved Testnet trade") {
+            worker.execute {
+                try {
+                    val state = api("/api/v1/testnet/trades")
+                    val trades = state.optJSONArray("trades") ?: JSONArray()
+                    if (trades.length() == 0) throw IllegalStateException("Save a trade first.")
+                    val trade = trades.optJSONObject(0) ?: JSONObject()
+                    val id = trade.optString("trade_id")
+                    if (id.isBlank()) throw IllegalStateException("Trade identifier is missing.")
+                    api("/api/v1/testnet/trades/" + id + "/enable", "POST")
+                    val refreshed = api("/api/v1/testnet/trades")
+                    ui.post { renderTestnetState(refreshed) }
+                } catch (e: Exception) {
+                    ui.post { testnetState.text = "Arm failed: " + e.message; testnetState.setTextColor(red) }
+                }
+            }
+        }, params())
+        box.addView(makeButton("EMERGENCY STOP") {
+            performTestnet("/api/v1/testnet/emergency-stop")
+        }, params())
+        box.addView(makeButton("Release emergency-stop latch") {
+            performTestnet("/api/v1/testnet/emergency-stop/release")
+        }, params())
+        testnetState = label("Testnet journal not loaded. Emergency stop defaults to ACTIVE.", 12f, gold)
+        box.addView(testnetState, params())
+        return box
+    }
+
+    private fun refreshTestnetState() {
+        worker.execute {
+            try {
+                val state = api("/api/v1/testnet/trades")
+                ui.post { renderTestnetState(state) }
+            } catch (e: Exception) {
+                ui.post { testnetState.text = "Testnet refresh failed: " + e.message; testnetState.setTextColor(red) }
+            }
+        }
+    }
+
+    private fun renderTestnetState(state: JSONObject) {
+        val stopped = state.optBoolean("emergency_stop", true)
+        val trades = state.optJSONArray("trades")?.length() ?: 0
+        val orders = state.optJSONArray("orders")?.length() ?: 0
+        val positions = state.optJSONArray("positions")?.length() ?: 0
+        val balances = state.optJSONArray("balances") ?: JSONArray()
+        val balanceText = (0 until balances.length()).mapNotNull { i ->
+            balances.optJSONObject(i)?.let { b ->
+                b.optString("asset") + " free " + b.optString("free", "—") +
+                    " / total " + b.optString("total", "—")
+            }
+        }.joinToString(" · ")
+        testnetState.text = "Testnet only · Emergency stop: " +
+            (if (stopped) "ACTIVE" else "released") + " · Trades: " + trades +
+            " · Orders: " + orders + " · Positions: " + positions +
+            if (balanceText.isBlank()) " · Balances not synced yet" else " · " + balanceText
+        testnetState.setTextColor(if (stopped) gold else green)
+    }
+
     private fun performTestnet(path: String, payload: JSONObject? = null) {
         notice.text = "Sending authenticated Testnet control request…"
         worker.execute {
@@ -244,9 +344,9 @@ class MainActivity : Activity() {
                 ui.post {
                     val halted = state.optBoolean("emergency_stop", true)
                     val orderCount = state.optJSONArray("orders")?.length() ?: 0
-                    notice.text = "Testnet state updated · Emergency stop: " +
-                        (if (halted) "ACTIVE" else "released") + " · Orders: " + orderCount +
-                        " · Response: " + result.optString("status", "saved")
+                    renderTestnetState(state)
+                    notice.text = "Testnet response: " + result.optString("status", "saved") +
+                        " · No real-money orders are enabled."
                     notice.setTextColor(if (halted) gold else green)
                 }
             } catch (e: Exception) {
