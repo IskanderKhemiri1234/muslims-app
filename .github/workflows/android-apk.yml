@@ -7,7 +7,7 @@ concurrency:
 on:
   workflow_dispatch:
   push:
-    branches: [deploy/infrlo-paper-v1]
+    branches: [deploy/infrlo-paper-v1, feature/binance-live-execution-v1]
     paths:
       - "android-app/**"
       - ".github/workflows/android-apk.yml"
