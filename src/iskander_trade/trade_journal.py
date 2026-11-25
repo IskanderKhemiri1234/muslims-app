@@ -247,14 +247,52 @@ class TradeJournal:
             if not row:
                 db.rollback()
                 raise KeyError("order intent not found")
+            previous = db.execute(
+                "SELECT trade_id,side,filled,symbol FROM orders WHERE client_order_id=?",
+                (client_order_id,),
+            ).fetchone()
+            old_filled = Decimal(previous["filled"] or "0")
+            new_filled = Decimal(str(order.get("filled") or "0"))
+            if new_filled < old_filled:
+                db.rollback()
+                raise JournalError("Exchange cumulative filled amount moved backwards.")
+            delta = new_filled - old_filled
+            average = Decimal(str(order.get("average") or "0"))
+            status = str(order.get("status") or "unknown")
+            if status == "open" and new_filled > 0:
+                status = "partially_filled"
             db.execute(
                 """UPDATE orders SET exchange_order_id=?,filled=?,remaining=?,average=?,
                    status=?,raw_json=?,updated_at=? WHERE client_order_id=?""",
-                (str(order.get("id") or "") or None, str(order.get("filled") or "0"),
-                 str(order.get("remaining") or "0"), str(order.get("average") or ""),
-                 str(order.get("status") or "unknown"),
-                 json.dumps(order, default=str), now, client_order_id),
+                (str(order.get("id") or "") or None, str(new_filled),
+                 str(order.get("remaining") or "0"), str(average) if average else "",
+                 status, json.dumps(order, default=str), now, client_order_id),
             )
+            if delta > 0 and average > 0:
+                position = db.execute(
+                    "SELECT amount,average_entry,status FROM positions WHERE trade_id=?",
+                    (previous["trade_id"],),
+                ).fetchone()
+                current_amount = Decimal(position["amount"]) if position else Decimal("0")
+                if previous["side"] == "buy":
+                    total = current_amount + delta
+                    prior_cost = current_amount * Decimal(position["average_entry"]) if position else Decimal("0")
+                    weighted = (prior_cost + delta * average) / total
+                    db.execute(
+                        """INSERT INTO positions(trade_id,symbol,amount,average_entry,status,updated_at)
+                           VALUES(?,?,?,?,?,?) ON CONFLICT(trade_id) DO UPDATE SET
+                           amount=excluded.amount,average_entry=excluded.average_entry,
+                           status=excluded.status,updated_at=excluded.updated_at""",
+                        (previous["trade_id"], previous["symbol"], str(total), str(weighted),
+                         "open", now),
+                    )
+                else:
+                    remaining = max(Decimal("0"), current_amount - delta)
+                    db.execute(
+                        """UPDATE positions SET amount=?,status=?,updated_at=? WHERE trade_id=?""",
+                        (str(remaining), "closed" if remaining == 0 else "open",
+                         now, previous["trade_id"]),
+                    )
             db.execute(
                 "INSERT INTO audit_events(trade_id,event_type,detail_json,occurred_at) VALUES(?,?,?,?)",
                 (row["trade_id"], "order_reconciled",
