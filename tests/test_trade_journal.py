@@ -217,3 +217,16 @@ def test_sell_fill_cannot_create_short_spot_position(tmp_path):
             "id": "sell-early", "filled": "0.01", "remaining": "0",
             "average": "61000", "status": "closed",
         })
+
+
+def test_monitor_cycle_lease_is_shared_across_journal_instances(tmp_path):
+    path = tmp_path / "journal.sqlite3"
+    first = TradeJournal(path)
+    second = TradeJournal(path)
+    assert first.acquire_cycle_lease("process-one") is True
+    assert second.acquire_cycle_lease("process-two") is False
+    second.release_cycle_lease("process-two")
+    assert second.acquire_cycle_lease("process-two") is False
+    first.release_cycle_lease("process-one")
+    assert second.acquire_cycle_lease("process-two") is True
+    second.release_cycle_lease("process-two")
