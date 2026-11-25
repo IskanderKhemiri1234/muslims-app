@@ -65,6 +65,16 @@ table{width:100%;border-collapse:collapse;min-width:480px}td,th{text-align:left;
  </div>
  <div class="scroll" style="margin-top:12px"><table><thead><tr><th>Pair</th><th>Quantity</th><th>Entry</th><th>Stop</th><th>Target</th><th>Status</th><th>Control</th></tr></thead><tbody id="testnetTrades"><tr><td colspan="7">Connect to load Testnet trade settings.</td></tr></tbody></table></div>
  <div class="scroll" style="margin-top:12px"><table><thead><tr><th>Asset</th><th>Free</th><th>Used</th><th>Total</th><th>Last sync</th></tr></thead><tbody id="testnetBalances"><tr><td colspan="5">No exchange balance sync yet.</td></tr></tbody></table></div>
+ <h2 style="margin-top:18px">Order reconciliation</h2>
+ <div class="scroll" style="margin-top:8px"><table><thead><tr><th>Client order</th><th>Pair</th><th>Side</th><th>Filled</th><th>Status</th><th>Fill sync</th></tr></thead><tbody id="testnetOrders"><tr><td colspan="6">No orders recorded.</td></tr></tbody></table></div>
+ <h2 style="margin-top:18px">Exchange fills & commissions</h2>
+ <div class="scroll" style="margin-top:8px"><table><thead><tr><th>Fill</th><th>Side</th><th>Quantity</th><th>Price</th><th>Fee</th></tr></thead><tbody id="testnetFills"><tr><td colspan="5">No fills recorded.</td></tr></tbody></table></div>
+ <div class="grid" style="margin-top:12px">
+  <div><div class="muted small">Gross realized P/L</div><div class="metric" id="testnetGross">—</div></div>
+  <div><div class="muted small">Net realized P/L by quote asset</div><div class="metric" id="testnetNet">—</div></div>
+  <div><div class="muted small">Commissions by asset</div><div id="testnetFees" class="muted small">—</div></div>
+ </div>
+ <p class="muted small" id="testnetAccounting">Accounting reconciliation has not run.</p>
  <p class="muted small" id="testnetState">Testnet journal and emergency-stop state are not loaded.</p>
 </section>
 <section class="panel">
@@ -100,9 +110,17 @@ async function runCycle(){if(!token){setStatus("Connect before running a paper c
 async 
 async function refreshTestnet(){const s=await request("/api/v1/testnet/trades");renderTestnet(s)}
 function renderTestnet(s){
- const trades=s.trades||[],orders=s.orders||[],positions=s.positions||[];
- el("testnetTrades").innerHTML=trades.map(t=>"<tr><td>"+escapeHtml(t.symbol)+"</td><td>"+escapeHtml(t.quantity)+"</td><td>"+escapeHtml(t.entry_price)+"</td><td>"+escapeHtml(t.stop_loss_price)+"</td><td>"+escapeHtml(t.take_profit_price)+"</td><td>"+escapeHtml(t.status)+(t.enabled?" · armed":"")+"</td><td><button class='secondary' onclick=\"tradeControl('"+escapeHtml(t.trade_id)+"','"+(t.enabled?"pause":"enable")+"')\">"+(t.enabled?"Pause":"Arm")+"</button></td></tr>").join("")||"<tr><td colspan='7'>No configured Testnet trades.</td></tr>";
+ const trades=s.trades||[],orders=s.orders||[],positions=s.positions||[],fills=s.fills||[];
+ el("testnetTrades").innerHTML=trades.map(t=>"<tr><td>"+escapeHtml(t.symbol)+"</td><td>"+escapeHtml(t.quantity)+"</td><td>"+escapeHtml(t.entry_price)+"</td><td>"+escapeHtml(t.stop_loss_price)+"</td><td>"+escapeHtml(t.take_profit_price)+"</td><td>"+escapeHtml(t.status)+(t.enabled?" · armed":"")+"</td><td><button class='secondary' onclick="\"tradeControl('"+escapeHtml(t.trade_id)+"','"+(t.enabled?"pause":"enable")+"')\">"+(t.enabled?"Pause":"Arm")+"</button></td></tr>").join("")||"<tr><td colspan='7'>No configured Testnet trades.</td></tr>";
  el("testnetBalances").innerHTML=(s.balances||[]).map(b=>"<tr><td>"+escapeHtml(b.asset)+"</td><td>"+escapeHtml(b.free)+"</td><td>"+escapeHtml(b.used)+"</td><td>"+escapeHtml(b.total)+"</td><td>"+escapeHtml(b.observed_at)+"</td></tr>").join("")||"<tr><td colspan='5'>No exchange balance sync yet.</td></tr>";
+ el("testnetOrders").innerHTML=orders.map(o=>"<tr><td>"+escapeHtml(o.client_order_id)+"</td><td>"+escapeHtml(o.symbol)+"</td><td>"+escapeHtml(o.side)+"</td><td>"+escapeHtml(o.filled)+" / "+escapeHtml(o.amount)+"</td><td>"+escapeHtml(o.status)+"</td><td>"+(o.fills_synced?"complete":"pending")+"</td></tr>").join("")||"<tr><td colspan='6'>No orders recorded.</td></tr>";
+ el("testnetFills").innerHTML=fills.map(f=>"<tr><td>"+escapeHtml(f.fill_key)+"</td><td>"+escapeHtml(f.amount)+"</td><td>"+escapeHtml(f.price)+"</td><td>"+escapeHtml(f.fee_cost)+" "+escapeHtml(f.fee_currency||"")+"</td></tr>").join("")||"<tr><td colspan='4'>No fills recorded.</td></tr>";
+ el("testnetGross").textContent=escapeHtml(s.gross_realized_pnl||"0");
+ const net=(s.net_realized_quote_pnl||[]).map(x=>escapeHtml(x.realized_quote_pnl)+" "+escapeHtml(x.quote_asset)).join(" · ");
+ el("testnetNet").textContent=net||"—";
+ el("testnetFees").textContent=(s.fee_totals||[]).map(x=>escapeHtml(x.total_fee)+" "+escapeHtml(x.currency)).join(" · ")||"No commissions recorded";
+ const issues=s.accounting_issues||[];
+ el("testnetAccounting").textContent=issues.length?"Accounting BLOCKED: "+issues.join(" | "):"Fill quantities reconcile with cumulative exchange order fills.";
  el("testnetState").textContent="Emergency stop: "+(s.emergency_stop?"ACTIVE":"released")+" · Stored orders: "+orders.length+" · Positions: "+positions.length;
 }
 async function createTestnetTrade(){
