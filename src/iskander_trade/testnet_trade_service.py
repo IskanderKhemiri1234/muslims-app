@@ -83,6 +83,8 @@ class TestnetTradeService:
                             known["symbol"], exchange_order_id
                         )
                         self.journal.record_fills(known["client_order_id"], fills)
+                        if order.get("status") in {"closed", "canceled", "rejected", "expired"}:
+                            self.journal.mark_fills_synced(known["client_order_id"])
                 except ccxt.BaseError as exc:
                     # Missing/temporarily unavailable exchange state remains unresolved.
                     # Never blindly re-submit an intent with an uncertain outcome.
