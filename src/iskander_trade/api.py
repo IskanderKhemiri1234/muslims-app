@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import ccxt
+from pydantic import BaseModel, Field
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -21,6 +22,7 @@ from .engine import PaperTradingEngine
 from .market_data import BinanceMarketData
 from .paper_ledger import PaperLedger
 from .state import load_state
+from .testnet_trade_service import TestnetTradeService
 
 log = logging.getLogger("iskander_trade.api")
 settings = Settings()
@@ -29,6 +31,26 @@ dashboard_dir = Path(__file__).resolve().parents[2] / "dashboard"
 cycle_lock = threading.Lock()
 worker_stop = threading.Event()
 worker_thread: threading.Thread | None = None
+testnet_stop = threading.Event()
+testnet_thread: threading.Thread | None = None
+testnet_service = TestnetTradeService()
+
+
+class TradeConfigRequest(BaseModel):
+    symbol: str = Field(min_length=3, max_length=24)
+    quantity: str = Field(min_length=1, max_length=40)
+    entry_price: str = Field(min_length=1, max_length=40)
+    stop_loss_price: str = Field(min_length=1, max_length=40)
+    take_profit_price: str = Field(min_length=1, max_length=40)
+
+
+def testnet_worker_loop() -> None:
+    while not testnet_stop.is_set():
+        try:
+            testnet_service.cycle()
+        except Exception:
+            log.exception("Binance Testnet worker cycle failed; will retry.")
+        testnet_stop.wait(max(settings.poll_seconds, 10))
 
 
 def _close_client(client: BinanceMarketData | None) -> None:
@@ -66,7 +88,16 @@ def paper_worker_loop() -> None:
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     global worker_thread
+    global testnet_thread
     enabled = os.getenv("RUN_PAPER_WORKER", "false").strip().lower() in {"1", "true", "yes"}
+    testnet_enabled = os.getenv("RUN_BINANCE_TESTNET_WORKER", "false").strip().lower() in {"1", "true", "yes"}
+    if testnet_enabled:
+        testnet_stop.clear()
+        testnet_thread = threading.Thread(
+            target=testnet_worker_loop, name="iskander-binance-testnet-worker", daemon=True
+        )
+        testnet_thread.start()
+        log.warning("Binance Spot Testnet worker started; emergency stop remains durable.")
     if enabled:
         worker_stop.clear()
         worker_thread = threading.Thread(
@@ -77,6 +108,11 @@ async def lifespan(_app: FastAPI):
     try:
         yield
     finally:
+        if testnet_enabled:
+            testnet_stop.set()
+            if testnet_thread is not None:
+                testnet_thread.join(timeout=25)
+                testnet_thread = None
         if enabled:
             worker_stop.set()
             if worker_thread is not None:
@@ -147,6 +183,56 @@ def status_payload() -> dict[str, Any]:
         "state_persistence": "atomic JSON state + durable SQLite FIFO ledger; back up both files",
     }
 
+
+
+@app.get("/api/v1/testnet/trades", dependencies=[Depends(require_dashboard_token)])
+def testnet_trades() -> dict[str, Any]:
+    return testnet_service.snapshot()
+
+
+@app.post("/api/v1/testnet/trades", dependencies=[Depends(require_dashboard_token)])
+def create_testnet_trade(payload: TradeConfigRequest) -> dict[str, Any]:
+    try:
+        return testnet_service.create_trade(**payload.model_dump())
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/api/v1/testnet/trades/{trade_id}/enable", dependencies=[Depends(require_dashboard_token)])
+def enable_testnet_trade(trade_id: str) -> dict[str, Any]:
+    try:
+        return testnet_service.set_enabled(trade_id, True)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Trade not found.") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/api/v1/testnet/trades/{trade_id}/pause", dependencies=[Depends(require_dashboard_token)])
+def pause_testnet_trade(trade_id: str) -> dict[str, Any]:
+    try:
+        return testnet_service.set_enabled(trade_id, False)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Trade not found.") from exc
+
+
+@app.post("/api/v1/testnet/emergency-stop", dependencies=[Depends(require_dashboard_token)])
+def testnet_emergency_stop() -> dict[str, Any]:
+    return testnet_service.emergency_stop()
+
+
+@app.post("/api/v1/testnet/emergency-stop/release", dependencies=[Depends(require_dashboard_token)])
+def release_testnet_emergency_stop() -> dict[str, Any]:
+    return testnet_service.release_emergency_stop()
+
+
+@app.post("/api/v1/testnet/cycle", dependencies=[Depends(require_dashboard_token)])
+def run_testnet_cycle() -> dict[str, Any]:
+    try:
+        return testnet_service.cycle()
+    except Exception as exc:
+        log.exception("Testnet cycle failed.")
+        raise HTTPException(status_code=502, detail="Testnet cycle failed. Check server logs.") from exc
 
 @app.get("/api/v1/accounting", dependencies=[Depends(require_dashboard_token)])
 def accounting_report() -> dict[str, Any]:
