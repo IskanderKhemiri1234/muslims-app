@@ -22,7 +22,7 @@ class OrderValidationError(ValueError):
     """Raised when an order violates local safety checks."""
 
 
-def _decimal(value: str | int | float | Decimal, field: str) -> Decimal:
+def _decimal(value: str | float | Decimal, field: str) -> Decimal:
     try:
         result = Decimal(str(value))
     except (InvalidOperation, ValueError) as exc:
@@ -82,8 +82,8 @@ class BinanceSpotExecution:
         self.exchange.set_sandbox_mode(self.settings.testnet)
         self.exchange.load_markets()
 
-    def _validate(self, symbol: str, side: str, amount: str | int | float | Decimal,
-                  price: str | int | float | Decimal) -> tuple[str, Decimal, Decimal]:
+    def _validate(self, symbol: str, side: str, amount: str | float | Decimal,
+                  price: str | float | Decimal) -> tuple[str, Decimal, Decimal]:
         normalized = symbol.strip().upper()
         if normalized not in self.settings.allowed_symbols:
             raise OrderValidationError("Symbol is not in BINANCE_ALLOWED_SYMBOLS.")
@@ -113,8 +113,8 @@ class BinanceSpotExecution:
         return normalized, formatted_amount, formatted_price
 
     def create_limit_order(self, symbol: str, side: str,
-                           amount: str | int | float | Decimal,
-                           price: str | int | float | Decimal,
+                           amount: str | float | Decimal,
+                           price: str | float | Decimal,
                            client_order_id: str) -> dict[str, Any]:
         if not client_order_id or len(client_order_id) > 36:
             raise OrderValidationError("A unique client_order_id of 1–36 characters is required.")
@@ -131,7 +131,7 @@ class BinanceSpotExecution:
         return self.exchange.fetch_order(order_id, normalized)
 
     def create_market_order(self, symbol: str, side: str,
-                            amount: str | int | float | Decimal,
+                            amount: str | float | Decimal,
                             client_order_id: str) -> dict[str, Any]:
         if not client_order_id or len(client_order_id) > 36:
             raise OrderValidationError("A unique client_order_id of 1–36 characters is required.")
