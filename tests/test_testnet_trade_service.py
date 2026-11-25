@@ -13,13 +13,14 @@ class FakeTestnetAdapter:
         self.orders = {}
         self.closed = False
         self.market_sides = []
+        self.cancel_status = "canceled"
 
     def fetch_order_by_client_id(self, client_order_id, symbol):
         return self.orders[client_order_id]
 
     def cancel_order_by_client_id(self, client_order_id, symbol):
         current = dict(self.orders[client_order_id])
-        current["status"] = "canceled"
+        current["status"] = self.cancel_status
         self.orders[client_order_id] = current
         return current
 
@@ -51,6 +52,10 @@ class FakeTestnetAdapter:
         }
         self.orders[client_order_id] = order
         return order
+
+    def fetch_open_orders(self, symbol):
+        return [dict(order, clientOrderId=client_id) for client_id, order in self.orders.items()
+                if order.get("status") in {"open", "partially_filled"}]
 
     def fetch_balance(self):
         return {
@@ -145,3 +150,20 @@ def test_pending_unfilled_buy_is_not_duplicated_on_next_cycle(tmp_path, monkeypa
     assert adapter.market_sides == ["buy"]
     assert len(second["orders"]) == 1
 
+
+
+def test_unconfirmed_entry_cancel_blocks_stop_loss_sell(tmp_path, monkeypatch):
+    service, _trade, adapter = _armed_service(tmp_path, monkeypatch, "60000")
+    service.cycle()
+    adapter.price = Decimal(57900)
+    adapter.cancel_status = "open"
+
+    restarted = TradeService(tmp_path / "testnet.sqlite3")
+    try:
+        restarted.cycle()
+    except RuntimeError as exc:
+        assert "cancellation is unconfirmed" in str(exc)
+    else:
+        raise AssertionError("Unconfirmed cancel must block exit order")
+
+    assert adapter.market_sides == ["buy"]
