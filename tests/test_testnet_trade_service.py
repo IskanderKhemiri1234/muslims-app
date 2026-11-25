@@ -138,7 +138,7 @@ def test_pending_unfilled_buy_is_not_duplicated_on_next_cycle(tmp_path, monkeypa
     first = service.cycle()
     assert first["actions"][0]["action"] == "entry_limit"
 
-    adapter.price = Decimal("59900")
+    adapter.price = Decimal(59900)
     second = service.cycle()
 
     assert second["actions"] == []
