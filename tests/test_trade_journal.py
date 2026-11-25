@@ -168,6 +168,9 @@ def test_fill_journal_survives_restart_and_keeps_distinct_commissions(tmp_path):
     fills = restored.snapshot()["fills"]
     assert {item["fill_key"] for item in fills} == {f"{client_id}:t1", f"{client_id}:t2"}
     assert sum(Decimal(item["fee_cost"]) for item in fills) == Decimal("0.000005")
+    assert restored.snapshot()["fee_totals"] == [
+        {"currency": "BTC", "total_fee": "0.000005"}
+    ]
 
 
 def test_sell_fill_records_gross_realized_pnl_and_closes_position(tmp_path):
