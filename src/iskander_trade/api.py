@@ -338,3 +338,8 @@ def evaluate_ml() -> dict[str, Any]:
         ) from exc
     finally:
         _close_client(client)
+
+
+# Live safety endpoints are read-only until the full order manager passes review.
+from .live_api import router as live_router
+app.include_router(live_router)
