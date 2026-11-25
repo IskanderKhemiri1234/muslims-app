@@ -128,8 +128,8 @@ function renderTestnet(s){
  const net=(s.net_realized_quote_pnl||[]).map(x=>escapeHtml(x.realized_quote_pnl)+" "+escapeHtml(x.quote_asset)).join(" · ");
  el("testnetNet").textContent=net||"—";
  el("testnetFees").textContent=(s.fee_totals||[]).map(x=>escapeHtml(x.total_fee)+" "+escapeHtml(x.currency)).join(" · ")||"No commissions recorded";
- const issues=s.accounting_issues||[];
- el("testnetAccounting").textContent=issues.length?"Accounting BLOCKED: "+issues.join(" | "):"Fill quantities reconcile with cumulative exchange order fills.";
+ const issues=s.accounting_issues||[],balanceIssues=s.balance_issues||[];
+ el("testnetAccounting").textContent=issues.length||balanceIssues.length?"Reconciliation BLOCKED: "+issues.concat(balanceIssues).join(" | "):"Fill quantities and bot inventory reconcile with the stored exchange balances.";
  el("testnetState").textContent="Emergency stop: "+(s.emergency_stop?"ACTIVE":"released")+" · Cycle: "+escapeHtml(s.reason||s.status||"—")+" · Stored orders: "+orders.length+" · Positions: "+positions.length;
 }
 async function createTestnetTrade(){
