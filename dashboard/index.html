@@ -114,14 +114,14 @@ function renderTestnet(s){
  el("testnetTrades").innerHTML=trades.map(t=>"<tr><td>"+escapeHtml(t.symbol)+"</td><td>"+escapeHtml(t.quantity)+"</td><td>"+escapeHtml(t.entry_price)+"</td><td>"+escapeHtml(t.stop_loss_price)+"</td><td>"+escapeHtml(t.take_profit_price)+"</td><td>"+escapeHtml(t.status)+(t.enabled?" · armed":"")+"</td><td><button class='secondary' onclick="\"tradeControl('"+escapeHtml(t.trade_id)+"','"+(t.enabled?"pause":"enable")+"')\">"+(t.enabled?"Pause":"Arm")+"</button></td></tr>").join("")||"<tr><td colspan='7'>No configured Testnet trades.</td></tr>";
  el("testnetBalances").innerHTML=(s.balances||[]).map(b=>"<tr><td>"+escapeHtml(b.asset)+"</td><td>"+escapeHtml(b.free)+"</td><td>"+escapeHtml(b.used)+"</td><td>"+escapeHtml(b.total)+"</td><td>"+escapeHtml(b.observed_at)+"</td></tr>").join("")||"<tr><td colspan='5'>No exchange balance sync yet.</td></tr>";
  el("testnetOrders").innerHTML=orders.map(o=>"<tr><td>"+escapeHtml(o.client_order_id)+"</td><td>"+escapeHtml(o.symbol)+"</td><td>"+escapeHtml(o.side)+"</td><td>"+escapeHtml(o.filled)+" / "+escapeHtml(o.amount)+"</td><td>"+escapeHtml(o.status)+"</td><td>"+(o.fills_synced?"complete":"pending")+"</td></tr>").join("")||"<tr><td colspan='6'>No orders recorded.</td></tr>";
- el("testnetFills").innerHTML=fills.map(f=>"<tr><td>"+escapeHtml(f.fill_key)+"</td><td>"+escapeHtml(f.amount)+"</td><td>"+escapeHtml(f.price)+"</td><td>"+escapeHtml(f.fee_cost)+" "+escapeHtml(f.fee_currency||"")+"</td></tr>").join("")||"<tr><td colspan='4'>No fills recorded.</td></tr>";
+ el("testnetFills").innerHTML=fills.map(f=>"<tr><td>"+escapeHtml(f.fill_key)+"</td><td>"+escapeHtml(f.side||"—")+"</td><td>"+escapeHtml(f.amount)+"</td><td>"+escapeHtml(f.price)+"</td><td>"+escapeHtml(f.fee_cost)+" "+escapeHtml(f.fee_currency||"")+"</td></tr>").join("")||"<tr><td colspan='4'>No fills recorded.</td></tr>";
  el("testnetGross").textContent=escapeHtml(s.gross_realized_pnl||"0");
  const net=(s.net_realized_quote_pnl||[]).map(x=>escapeHtml(x.realized_quote_pnl)+" "+escapeHtml(x.quote_asset)).join(" · ");
  el("testnetNet").textContent=net||"—";
  el("testnetFees").textContent=(s.fee_totals||[]).map(x=>escapeHtml(x.total_fee)+" "+escapeHtml(x.currency)).join(" · ")||"No commissions recorded";
  const issues=s.accounting_issues||[];
  el("testnetAccounting").textContent=issues.length?"Accounting BLOCKED: "+issues.join(" | "):"Fill quantities reconcile with cumulative exchange order fills.";
- el("testnetState").textContent="Emergency stop: "+(s.emergency_stop?"ACTIVE":"released")+" · Stored orders: "+orders.length+" · Positions: "+positions.length;
+ el("testnetState").textContent="Emergency stop: "+(s.emergency_stop?"ACTIVE":"released")+" · Cycle: "+escapeHtml(s.reason||s.status||"—")+" · Stored orders: "+orders.length+" · Positions: "+positions.length;
 }
 async function createTestnetTrade(){
  const payload={symbol:el("tradeSymbol").value.trim(),quantity:el("tradeQty").value.trim(),entry_price:el("tradeEntry").value.trim(),stop_loss_price:el("tradeStop").value.trim(),take_profit_price:el("tradeTarget").value.trim()};
