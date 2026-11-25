@@ -263,7 +263,7 @@ class TradeJournal:
                 db.rollback()
                 raise KeyError("order intent not found")
             previous = db.execute(
-                "SELECT trade_id,side,filled,symbol FROM orders WHERE client_order_id=?",
+                "SELECT trade_id,side,filled,symbol,average FROM orders WHERE client_order_id=?",
                 (client_order_id,),
             ).fetchone()
             old_filled = Decimal(previous["filled"] or "0")
@@ -273,6 +273,11 @@ class TradeJournal:
                 raise JournalError("Exchange cumulative filled amount moved backwards.")
             delta = new_filled - old_filled
             average = Decimal(str(order.get("average") or "0"))
+            previous_average = Decimal(str(previous["average"] or "0"))
+            incremental_price = (
+                (new_filled * average - old_filled * previous_average) / delta
+                if delta > 0 and average > 0 else average
+            )
             status = str(order.get("status") or "unknown")
             if status == "open" and new_filled > 0:
                 status = "partially_filled"
@@ -292,7 +297,7 @@ class TradeJournal:
                 if previous["side"] == "buy":
                     total = current_amount + delta
                     prior_cost = current_amount * Decimal(position["average_entry"]) if position else Decimal(0)
-                    weighted = (prior_cost + delta * average) / total
+                    weighted = (prior_cost + delta * incremental_price) / total
                     db.execute(
                         """INSERT INTO positions(trade_id,symbol,amount,average_entry,status,updated_at)
                            VALUES(?,?,?,?,?,?) ON CONFLICT(trade_id) DO UPDATE SET
