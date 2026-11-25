@@ -167,3 +167,20 @@ def test_unconfirmed_entry_cancel_blocks_stop_loss_sell(tmp_path, monkeypatch):
         raise AssertionError("Unconfirmed cancel must block exit order")
 
     assert adapter.market_sides == ["buy"]
+
+
+def test_unknown_exchange_open_order_halts_cycle_without_auto_cancel(tmp_path, monkeypatch):
+    service, _trade, adapter = _armed_service(tmp_path, monkeypatch, "60000")
+    adapter.orders["external-manual-order"] = {
+        "id": "external-1", "filled": "0", "remaining": "0.01",
+        "average": None, "status": "open",
+    }
+
+    result = service.cycle()
+
+    assert result["status"] == "halted"
+    assert result["reason"] == "unknown_exchange_open_orders"
+    assert result["actions"] == []
+    assert result["unknown_open_orders"][0]["client_order_id"] == "external-manual-order"
+    assert adapter.market_sides == []
+    assert adapter.orders["external-manual-order"]["status"] == "open"
