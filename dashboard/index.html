@@ -67,6 +67,30 @@ table{width:100%;border-collapse:collapse;min-width:480px}td,th{text-align:left;
  <div class="scroll" style="margin-top:12px"><table><thead><tr><th>Asset</th><th>Free</th><th>Used</th><th>Total</th><th>Last sync</th></tr></thead><tbody id="testnetBalances"><tr><td colspan="5">No exchange balance sync yet.</td></tr></tbody></table></div>
  <p class="muted small" id="testnetState">Testnet journal and emergency-stop state are not loaded.</p>
 </section>
+<section class="panel" id="livePanel">
+ <div class="panel-head"><h2>Binance Spot · Manual Live</h2><span class="tag" id="liveModeTag">LIVE DISARMED</span></div>
+ <p class="muted small">Manual orders only. No strategy worker or automatic trading. Real funds are used only when server-side Live gates are enabled and you explicitly arm the panel. Spot only; no margin, futures, transfers or withdrawals.</p>
+ <div class="grid">
+  <input id="liveSymbol" value="BTC/USDT" aria-label="Live symbol" placeholder="BTC/USDT">
+  <select id="liveSide" aria-label="Order side"><option value="buy">BUY</option><option value="sell">SELL</option></select>
+  <select id="liveType" aria-label="Order type"><option value="limit">LIMIT</option><option value="market">MARKET</option></select>
+  <input id="liveAmount" inputmode="decimal" aria-label="Base quantity" placeholder="Base quantity">
+  <input id="livePrice" inputmode="decimal" aria-label="Limit price" placeholder="Limit price (required for LIMIT)">
+ </div>
+ <div class="button-row" style="margin-top:12px">
+  <button class="secondary" onclick="refreshLive()">Refresh Live state</button>
+  <button class="secondary" onclick="releaseLiveStop()">Release Live stop</button>
+  <button onclick="armLive()">Arm manual Live</button>
+  <button class="secondary" onclick="disarmLive()">Disarm</button>
+  <button style="background:var(--bad)" onclick="stopLive()">LIVE EMERGENCY STOP</button>
+  <button onclick="sendLiveOrder()">Review &amp; submit real order</button>
+  <button class="secondary" onclick="reconcileLive()">Reconcile orders</button>
+ </div>
+ <p class="muted small" id="liveState">Live state not loaded. The server-side emergency stop defaults to ON.</p>
+ <div class="scroll"><table><thead><tr><th>Pair</th><th>Side</th><th>Type</th><th>Amount</th><th>Filled</th><th>Average</th><th>Status</th><th>Client ID</th><th>Control</th></tr></thead><tbody id="liveOrders"><tr><td colspan="9">Connect to load Live order journal.</td></tr></tbody></table></div>
+ <div class="scroll" style="margin-top:12px"><table><thead><tr><th>Pair</th><th>Side</th><th>Fill amount</th><th>Price</th><th>Fee</th><th>Fee asset</th><th>Realized P/L (USDT)</th></tr></thead><tbody id="liveFills"><tr><td colspan="7">No Live fills loaded.</td></tr></tbody></table></div>
+ <div class="scroll" style="margin-top:12px"><table><thead><tr><th>Asset</th><th>Free</th><th>Used</th><th>Total</th><th>Last sync</th></tr></thead><tbody id="liveBalances"><tr><td colspan="5">Balances not synchronized yet.</td></tr></tbody></table></div>
+</section>
 <section class="panel">
  <div class="panel-head"><h2>Market watch</h2><button class="secondary" id="marketRefreshBtn" onclick="refreshMarkets()">↻ Update prices</button></div>
  <div class="scroll"><table><thead><tr><th>Market</th><th>Last price (USDT)</th></tr></thead><tbody id="markets"><tr><td colspan="2">Connect to load markets.</td></tr></tbody></table></div>
@@ -107,6 +131,7 @@ async function refreshLive(){
  el("liveState").textContent="Manual armed: "+s.manual_armed+" · Emergency stop: "+s.emergency_stop+" · Daily realized P/L: "+s.daily_realized_pnl_quote+" quote units · Open positions: "+(s.positions||[]).length;
  el("liveOrders").innerHTML=(s.orders||[]).map(o=>"<tr><td>"+escapeHtml(o.symbol)+"</td><td>"+escapeHtml(o.side)+"</td><td>"+escapeHtml(o.order_type)+"</td><td>"+escapeHtml(o.amount)+"</td><td>"+escapeHtml(o.filled)+"</td><td>"+escapeHtml(o.average||"—")+"</td><td>"+escapeHtml(o.status)+"</td><td>"+escapeHtml(o.client_order_id)+"</td><td>"+(["open","partially_filled","unknown"].includes(o.status)?"<button class='secondary' onclick=\\"cancelLive('"+escapeHtml(o.client_order_id)+"')\\">Cancel</button>":"—")+"</td></tr>").join("")||"<tr><td colspan='9'>No manual Live orders recorded.</td></tr>";
  el("liveFills").innerHTML=(s.fills||[]).map(f=>"<tr><td>"+escapeHtml(f.symbol)+"</td><td>"+escapeHtml(f.side)+"</td><td>"+escapeHtml(f.amount)+"</td><td>"+escapeHtml(f.price)+"</td><td>"+escapeHtml(f.fee_cost)+"</td><td>"+escapeHtml(f.fee_currency||"—")+"</td><td>"+escapeHtml(f.realized_pnl_quote)+"</td></tr>").join("")||"<tr><td colspan='7'>No Live fills recorded.</td></tr>";
+ el("liveBalances").innerHTML=(s.balances||[]).map(b=>"<tr><td>"+escapeHtml(b.asset)+"</td><td>"+escapeHtml(b.free)+"</td><td>"+escapeHtml(b.used)+"</td><td>"+escapeHtml(b.total)+"</td><td>"+escapeHtml(b.observed_at)+"</td></tr>").join("")||"<tr><td colspan='5'>Balances not synchronized yet.</td></tr>";
 }
 async function armLive(){try{await request("/api/v1/live/arm",{method:"POST"});await refreshLive();setStatus("Manual Live armed. No order has been sent yet.","good")}catch(e){setStatus("Live arm refused: "+e.message,"bad")}}
 async function disarmLive(){try{await request("/api/v1/live/disarm",{method:"POST"});await refreshLive();setStatus("Manual Live disarmed.","good")}catch(e){setStatus("Disarm failed: "+e.message,"bad")}}
