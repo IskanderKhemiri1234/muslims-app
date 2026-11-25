@@ -4,6 +4,7 @@ plugins {
 }
 
 val releaseStorePath = System.getenv("ANDROID_KEYSTORE_PATH")
+val releaseStoreType = System.getenv("ANDROID_KEYSTORE_TYPE") ?: "PKCS12"
 
 android {
     namespace = "com.iskander.aitrade"
@@ -19,15 +20,15 @@ android {
         applicationId = "com.iskander.aitrade"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.2.0"
+        versionCode = 2
+        versionName = "0.3.0"
     }
 
     signingConfigs {
         create("release") {
             if (!releaseStorePath.isNullOrBlank()) {
                 storeFile = file(releaseStorePath)
-                storeType = "PKCS12"
+                storeType = releaseStoreType
                 storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
                 keyAlias = System.getenv("ANDROID_KEY_ALIAS")
                 keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
