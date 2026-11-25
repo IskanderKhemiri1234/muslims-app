@@ -130,5 +130,54 @@ class BinanceSpotExecution:
             raise OrderValidationError("Symbol is not in BINANCE_ALLOWED_SYMBOLS.")
         return self.exchange.fetch_order(order_id, normalized)
 
+    def create_market_order(self, symbol: str, side: str,
+                            amount: str | int | float | Decimal,
+                            client_order_id: str) -> dict[str, Any]:
+        if not client_order_id or len(client_order_id) > 36:
+            raise OrderValidationError("A unique client_order_id of 1–36 characters is required.")
+        normalized = symbol.strip().upper()
+        if normalized not in self.settings.allowed_symbols:
+            raise OrderValidationError("Symbol is not in BINANCE_ALLOWED_SYMBOLS.")
+        if side not in {"buy", "sell"}:
+            raise OrderValidationError("Only Spot buy and sell orders are supported.")
+        qty = _decimal(amount, "amount")
+        if normalized not in self.exchange.markets:
+            raise OrderValidationError("Unknown Binance Spot symbol.")
+        market = self.exchange.market(normalized)
+        if not market.get("spot") or market.get("active") is False:
+            raise OrderValidationError("Market is not an active Spot market.")
+        formatted = Decimal(self.exchange.amount_to_precision(normalized, float(qty)))
+        if formatted <= 0:
+            raise OrderValidationError("Order rounds to zero at Binance precision.")
+        limits = market.get("limits") or {}
+        minimum = (limits.get("amount") or {}).get("min")
+        if minimum is not None and formatted < Decimal(str(minimum)):
+            raise OrderValidationError("Order amount is below Binance minimum.")
+        return self.exchange.create_order(
+            normalized, "market", side, float(formatted), None,
+            {"newClientOrderId": client_order_id},
+        )
+
+    def fetch_order_by_client_id(self, client_order_id: str, symbol: str) -> dict[str, Any]:
+        normalized = symbol.strip().upper()
+        if normalized not in self.settings.allowed_symbols:
+            raise OrderValidationError("Symbol is not in BINANCE_ALLOWED_SYMBOLS.")
+        return self.exchange.fetch_order(
+            None, normalized, {"origClientOrderId": client_order_id}
+        )
+
+    def fetch_balance(self) -> dict[str, Any]:
+        return self.exchange.fetch_balance()
+
+    def fetch_last_price(self, symbol: str) -> Decimal:
+        normalized = symbol.strip().upper()
+        if normalized not in self.settings.allowed_symbols:
+            raise OrderValidationError("Symbol is not in BINANCE_ALLOWED_SYMBOLS.")
+        ticker = self.exchange.fetch_ticker(normalized)
+        last = ticker.get("last")
+        if last is None:
+            raise RuntimeError("Binance did not return a current ticker price.")
+        return _decimal(last, "ticker.last")
+
     def close(self) -> None:
         self.exchange.close()
