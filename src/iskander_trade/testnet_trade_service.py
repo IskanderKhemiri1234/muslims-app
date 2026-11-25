@@ -5,13 +5,19 @@ adapter confirms Testnet mode and the durable emergency stop is released.
 """
 from __future__ import annotations
 
+import logging
 import os
+import threading
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+import ccxt
+
 from .live_execution import BinanceSpotExecution, ExecutionDisabled
 from .trade_journal import TradeJournal
+
+log = logging.getLogger(__name__)
 
 
 class TestnetTradeService:
@@ -19,6 +25,7 @@ class TestnetTradeService:
         self.journal = TradeJournal(
             journal_path or os.getenv("TRADE_JOURNAL_PATH", "data/trades.sqlite3")
         )
+        self._cycle_lock = threading.Lock()
 
     @staticmethod
     def _execution() -> BinanceSpotExecution:
@@ -50,6 +57,14 @@ class TestnetTradeService:
         return self.journal.snapshot()
 
     def cycle(self) -> dict[str, Any]:
+        if not self._cycle_lock.acquire(blocking=False):
+            raise RuntimeError("A Testnet monitor cycle is already running.")
+        try:
+            return self._run_cycle()
+        finally:
+            self._cycle_lock.release()
+
+    def _run_cycle(self) -> dict[str, Any]:
         if self.journal.emergency_stopped():
             return {"status": "halted", "reason": "emergency_stop", **self.journal.snapshot()}
 
@@ -63,8 +78,13 @@ class TestnetTradeService:
                         pending["client_order_id"], pending["symbol"]
                     )
                     self.journal.update_order(pending["client_order_id"], order)
-                except Exception:
+                except ccxt.BaseError as exc:
                     # Unknown submission state is never blindly resubmitted.
+                    log.warning(
+                        "Could not reconcile Testnet order %s; keeping intent pending: %s",
+                        pending["client_order_id"],
+                        type(exc).__name__,
+                    )
                     continue
 
             state = self.journal.snapshot()
@@ -90,9 +110,11 @@ class TestnetTradeService:
                         # Intent is durable before the exchange call.
                         order = adapter.create_market_order(symbol, "sell", amount, client_id)
                         self.journal.update_order(client_id, order)
-                        actions.append({"trade_id": trade["trade_id"],
-                                        "action": "stop_loss" if price <= stop else "take_profit",
-                                        "client_order_id": client_id})
+                        actions.append({
+                            "trade_id": trade["trade_id"],
+                            "action": "stop_loss" if price <= stop else "take_profit",
+                            "client_order_id": client_id,
+                        })
                 elif price <= Decimal(trade["entry_price"]):
                     client_id = self.journal.create_order_intent(
                         trade_id=trade["trade_id"], symbol=symbol, side="buy",
@@ -102,13 +124,19 @@ class TestnetTradeService:
                         symbol, "buy", trade["quantity"], trade["entry_price"], client_id
                     )
                     self.journal.update_order(client_id, order)
-                    actions.append({"trade_id": trade["trade_id"],
-                                    "action": "entry_limit", "client_order_id": client_id})
+                    actions.append({
+                        "trade_id": trade["trade_id"],
+                        "action": "entry_limit",
+                        "client_order_id": client_id,
+                    })
 
             balances = adapter.fetch_balance()
             normalized_balances = {
-                key: {"free": str(value.get("free", 0)), "used": str(value.get("used", 0)),
-                      "total": str(value.get("total", 0))}
+                key: {
+                    "free": str(value.get("free", 0)),
+                    "used": str(value.get("used", 0)),
+                    "total": str(value.get("total", 0)),
+                }
                 for key, value in balances.items()
                 if isinstance(value, dict) and any(
                     value.get(field) is not None for field in ("free", "used", "total")
