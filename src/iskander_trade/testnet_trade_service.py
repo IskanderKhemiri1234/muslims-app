@@ -137,6 +137,51 @@ class TestnetTradeService:
                     )
                     continue
 
+            # Compare every configured market's exchange-open orders with our durable
+            # intents. Unknown orders are never canceled automatically; they freeze
+            # this cycle so an external/manual order cannot be mistaken for free funds.
+            known_ids = {item["client_order_id"] for item in self.journal.recent_orders()}
+            unknown_open_orders: list[dict[str, str]] = []
+            for symbol in sorted(adapter.settings.allowed_symbols):
+                for exchange_order in adapter.fetch_open_orders(symbol):
+                    info = exchange_order.get("info") if isinstance(exchange_order.get("info"), dict) else {}
+                    client_id = str(
+                        exchange_order.get("clientOrderId")
+                        or info.get("clientOrderId")
+                        or info.get("origClientOrderId")
+                        or ""
+                    )
+                    if client_id not in known_ids:
+                        unknown_open_orders.append({
+                            "symbol": symbol,
+                            "exchange_order_id": str(exchange_order.get("id") or ""),
+                            "client_order_id": client_id,
+                            "status": str(exchange_order.get("status") or "open"),
+                        })
+            if unknown_open_orders:
+                balances = adapter.fetch_balance()
+                normalized = {
+                    key: {
+                        "free": str(value.get("free", 0)),
+                        "used": str(value.get("used", 0)),
+                        "total": str(value.get("total", 0)),
+                    }
+                    for key, value in balances.items()
+                    if isinstance(value, dict) and any(
+                        value.get(field) is not None for field in ("free", "used", "total")
+                    )
+                }
+                self.journal.save_balance_snapshot(normalized)
+                snapshot = self.journal.snapshot()
+                return {
+                    "status": "halted",
+                    "reason": "unknown_exchange_open_orders",
+                    "unknown_open_orders": unknown_open_orders,
+                    "actions": [],
+                    "mode": "binance_spot_testnet",
+                    **snapshot,
+                }
+
             state = self.journal.snapshot()
             pending_by_trade: dict[str, list[dict[str, Any]]] = {}
             for item in self.journal.pending_orders():
@@ -161,9 +206,21 @@ class TestnetTradeService:
                         # partial position, otherwise a late buy could reopen risk.
                         for pending_buy in pending:
                             if pending_buy["side"] == "buy":
-                                canceled = adapter.cancel_order_by_client_id(
+                                adapter.cancel_order_by_client_id(
                                     pending_buy["client_order_id"], symbol
                                 )
+                                # A cancel acknowledgement alone is not enough: fetch
+                                # final state again to include fills racing with cancel.
+                                canceled = adapter.fetch_order_by_client_id(
+                                    pending_buy["client_order_id"], symbol
+                                )
+                                if canceled.get("status") not in {
+                                    "canceled", "closed", "rejected", "expired"
+                                }:
+                                    raise RuntimeError(
+                                        "Entry cancellation is unconfirmed; exit is blocked "
+                                        "until Binance reports a terminal order state."
+                                    )
                                 self.journal.update_order(
                                     pending_buy["client_order_id"], canceled
                                 )
