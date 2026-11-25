@@ -455,6 +455,17 @@ class TradeJournal:
                 "realizations": [dict(r) for r in db.execute(
                     "SELECT * FROM trade_realizations ORDER BY occurred_at DESC LIMIT 500"
                 )],
+                "fee_totals": [dict(r) for r in db.execute(
+                    """SELECT fee_currency, SUM(CAST(fee_cost AS REAL)) AS total_fee
+                       FROM fills WHERE fee_currency IS NOT NULL
+                       GROUP BY fee_currency ORDER BY fee_currency"""
+                )],
+                "gross_realized_pnl": str(sum(
+                    (Decimal(row["gross_pnl"]) for row in db.execute(
+                        "SELECT gross_pnl FROM trade_realizations"
+                    ).fetchall()),
+                    Decimal(0),
+                )),
                 "positions": [dict(r) for r in db.execute("SELECT * FROM positions")],
                 "emergency_stop": self.emergency_stopped(),
             }
