@@ -6,9 +6,9 @@ price source is implemented and verified.
 """
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
-from collections.abc import Iterable
 
 
 class AccountingError(ValueError):
