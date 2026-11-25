@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from iskander_trade.testnet_trade_service import TestnetTradeService
+from iskander_trade.testnet_trade_service import TestnetTradeService as TradeService
 
 
 class FakeTestnetAdapter:
@@ -60,7 +60,7 @@ class FakeTestnetAdapter:
 
 
 def _armed_service(tmp_path, monkeypatch, price):
-    service = TestnetTradeService(tmp_path / "testnet.sqlite3")
+    service = TradeService(tmp_path / "testnet.sqlite3")
     trade = service.create_trade(
         symbol="BTC/USDT", quantity="0.01", entry_price="60000",
         stop_loss_price="58000", take_profit_price="65000",
@@ -68,7 +68,7 @@ def _armed_service(tmp_path, monkeypatch, price):
     service.release_emergency_stop()
     service.set_enabled(trade["trade_id"], True)
     adapter = FakeTestnetAdapter(price)
-    monkeypatch.setattr(TestnetTradeService, "_execution", staticmethod(lambda: adapter))
+    monkeypatch.setattr(TradeService, "_execution", staticmethod(lambda: adapter))
     return service, trade, adapter
 
 
