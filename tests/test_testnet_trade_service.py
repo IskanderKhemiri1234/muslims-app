@@ -73,13 +73,13 @@ def _armed_service(tmp_path, monkeypatch, price):
 
 
 def test_partial_buy_then_stop_loss_sell_survives_service_restart(tmp_path, monkeypatch):
-    service, trade, adapter = _armed_service(tmp_path, monkeypatch, "60000")
+    service, _trade, adapter = _armed_service(tmp_path, monkeypatch, "60000")
     first = service.cycle()
     assert first["actions"][0]["action"] == "entry_limit"
     assert first["positions"][0]["amount"] == "0.004"
 
     restarted = TradeService(tmp_path / "testnet.sqlite3")
-    adapter.price = Decimal("57900")
+    adapter.price = Decimal(57900)
     second = restarted.cycle()
     assert second["actions"][0]["action"] == "stop_loss"
     assert Decimal(second["positions"][0]["amount"]) == Decimal(0)
@@ -89,9 +89,9 @@ def test_partial_buy_then_stop_loss_sell_survives_service_restart(tmp_path, monk
 
 
 def test_partial_buy_then_take_profit_sell(tmp_path, monkeypatch):
-    service, trade, adapter = _armed_service(tmp_path, monkeypatch, "60000")
+    service, _trade, adapter = _armed_service(tmp_path, monkeypatch, "60000")
     service.cycle()
-    adapter.price = Decimal("65100")
+    adapter.price = Decimal(65100)
     result = service.cycle()
     assert result["actions"][0]["action"] == "take_profit"
     assert Decimal(result["positions"][0]["amount"]) == 0
@@ -99,7 +99,7 @@ def test_partial_buy_then_take_profit_sell(tmp_path, monkeypatch):
 
 
 def test_emergency_stop_blocks_new_entries_but_keeps_balance_sync(tmp_path, monkeypatch):
-    service, trade, adapter = _armed_service(tmp_path, monkeypatch, "59000")
+    service, _trade, adapter = _armed_service(tmp_path, monkeypatch, "59000")
     service.emergency_stop("test emergency")
     result = service.cycle()
     assert result["status"] == "halted"
