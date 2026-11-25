@@ -107,3 +107,14 @@ def test_emergency_stop_blocks_new_entries_but_keeps_balance_sync(tmp_path, monk
     assert adapter.market_sides == []
     assert result["balances"]
     assert service.journal.emergency_stopped() is True
+
+
+def test_testnet_preflight_is_read_only_and_reports_connection(tmp_path, monkeypatch):
+    service, _trade, adapter = _armed_service(tmp_path, monkeypatch, "60000")
+    result = service.preflight()
+    assert result["status"] == "connected"
+    assert result["mode"] == "binance_spot_testnet"
+    assert result["orders_submitted"] is False
+    assert result["prices"] == {"BTC/USDT": "60000"}
+    assert adapter.market_sides == []
+    assert adapter.closed is True
