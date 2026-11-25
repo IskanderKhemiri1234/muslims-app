@@ -194,3 +194,17 @@ def test_unknown_exchange_open_order_halts_cycle_without_auto_cancel(tmp_path, m
     assert result["unknown_open_orders"][0]["client_order_id"] == "external-manual-order"
     assert adapter.market_sides == []
     assert adapter.orders["external-manual-order"]["status"] == "open"
+
+
+def test_insufficient_free_quote_balance_skips_buy(tmp_path, monkeypatch):
+    service, _trade, adapter = _armed_service(tmp_path, monkeypatch, "59000")
+    adapter.fetch_balance = lambda: {
+        "BTC": {"free": "0", "used": "0", "total": "0"},
+        "USDT": {"free": "1", "used": "0", "total": "1"},
+    }
+
+    result = service.cycle()
+
+    assert result["actions"] == []
+    assert adapter.market_sides == []
+    assert result["status"] == "completed"
