@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
+import uuid
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -59,9 +60,18 @@ class TestnetTradeService:
     def cycle(self) -> dict[str, Any]:
         if not self._cycle_lock.acquire(blocking=False):
             raise RuntimeError("A Testnet monitor cycle is already running.")
+        owner_id = uuid.uuid4().hex
+        lease_acquired = False
         try:
+            lease_acquired = self.journal.acquire_cycle_lease(owner_id)
+            if not lease_acquired:
+                raise RuntimeError(
+                    "Another Testnet monitor process owns the durable cycle lease."
+                )
             return self._run_cycle()
         finally:
+            if lease_acquired:
+                self.journal.release_cycle_lease(owner_id)
             self._cycle_lock.release()
 
     def _run_cycle(self) -> dict[str, Any]:
