@@ -16,6 +16,8 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
+from .fill_accounting import AccountingError, replay_spot_fills
+
 
 class JournalError(RuntimeError):
     pass
@@ -491,16 +493,91 @@ class TradeJournal:
             gross_realized = sum(
                 (Decimal(row["gross_pnl"]) for row in realized_rows), Decimal(0)
             )
+            trades = [dict(r) for r in db.execute(
+                "SELECT * FROM trade_configs ORDER BY created_at DESC"
+            )]
+            orders = [dict(r) for r in db.execute(
+                "SELECT * FROM orders ORDER BY created_at DESC LIMIT 200"
+            )]
+            stored_positions = {
+                row["trade_id"]: dict(row)
+                for row in db.execute("SELECT * FROM positions")
+            }
+            joined_fills = [dict(row) for row in db.execute(
+                """SELECT f.*,o.side,o.symbol FROM fills f
+                   JOIN orders o ON o.client_order_id=f.client_order_id
+                   ORDER BY f.occurred_at,f.fill_key"""
+            )]
+            filled_by_order: dict[str, Decimal] = {}
+            for row in joined_fills:
+                filled_by_order[row["client_order_id"]] = (
+                    filled_by_order.get(row["client_order_id"], Decimal(0))
+                    + Decimal(row["amount"])
+                )
+            accounting_issues: list[str] = []
+            for order in db.execute(
+                "SELECT client_order_id,filled FROM orders WHERE CAST(filled AS REAL)>0"
+            ):
+                expected = Decimal(order["filled"])
+                actual = filled_by_order.get(order["client_order_id"], Decimal(0))
+                if actual != expected:
+                    accounting_issues.append(
+                        f"Fill history mismatch for {order['client_order_id']}: "
+                        f"order filled={expected}, recorded fills={actual}."
+                    )
+
+            fills_by_trade: dict[str, list[dict[str, object]]] = {}
+            symbols_by_trade: dict[str, str] = {}
+            for row in joined_fills:
+                fills_by_trade.setdefault(row["trade_id"], []).append({
+                    "id": row["fill_key"],
+                    "side": row["side"],
+                    "amount": row["amount"],
+                    "price": row["price"],
+                    "fee_cost": row["fee_cost"],
+                    "fee_currency": row["fee_currency"] or "",
+                    "timestamp": row["occurred_at"],
+                })
+                symbols_by_trade[row["trade_id"]] = row["symbol"]
+
+            positions: list[dict[str, Any]] = []
+            net_realized: list[dict[str, str]] = []
+            for trade_id, fills in fills_by_trade.items():
+                symbol = symbols_by_trade[trade_id]
+                try:
+                    ledger = replay_spot_fills(symbol, fills)
+                except AccountingError as exc:
+                    accounting_issues.append(f"Fill ledger error for {trade_id}: {exc}")
+                    continue
+                positions.append({
+                    "trade_id": trade_id,
+                    "symbol": symbol,
+                    "amount": str(ledger.base_quantity),
+                    "average_entry": str(ledger.average_entry),
+                    "status": "open" if ledger.base_quantity > 0 else "closed",
+                    "accounting_source": "exchange_fills",
+                })
+                net_realized.append({
+                    "trade_id": trade_id,
+                    "symbol": symbol,
+                    "quote_asset": ledger.quote_asset,
+                    "realized_quote_pnl": str(ledger.realized_quote_pnl),
+                })
+            # Legacy/test-only rows without trade-history records remain visible as
+            # provisional positions, but the mismatch above blocks automated action.
+            trades_with_fills = set(fills_by_trade)
+            for trade_id, position in stored_positions.items():
+                if trade_id not in trades_with_fills:
+                    provisional = dict(position)
+                    provisional["accounting_source"] = "cumulative_order_provisional"
+                    positions.append(provisional)
+
             return {
                 "balances": [dict(r) for r in db.execute(
                     "SELECT * FROM account_balances ORDER BY asset"
                 )],
-                "trades": [dict(r) for r in db.execute(
-                    "SELECT * FROM trade_configs ORDER BY created_at DESC"
-                )],
-                "orders": [dict(r) for r in db.execute(
-                    "SELECT * FROM orders ORDER BY created_at DESC LIMIT 200"
-                )],
+                "trades": trades,
+                "orders": orders,
                 "fills": [dict(r) for r in db.execute(
                     "SELECT * FROM fills ORDER BY occurred_at DESC LIMIT 500"
                 )],
@@ -512,6 +589,8 @@ class TradeJournal:
                     for currency, total in sorted(fee_totals.items())
                 ],
                 "gross_realized_pnl": str(gross_realized),
-                "positions": [dict(r) for r in db.execute("SELECT * FROM positions")],
+                "net_realized_quote_pnl": net_realized,
+                "accounting_issues": accounting_issues,
+                "positions": positions,
                 "emergency_stop": self.emergency_stopped(),
             }
