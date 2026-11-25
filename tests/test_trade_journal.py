@@ -230,3 +230,12 @@ def test_monitor_cycle_lease_is_shared_across_journal_instances(tmp_path):
     first.release_cycle_lease("process-one")
     assert second.acquire_cycle_lease("process-two") is True
     second.release_cycle_lease("process-two")
+
+
+def test_cycle_lease_can_be_renewed_and_excludes_other_owner(tmp_path):
+    journal = TradeJournal(tmp_path / "journal.sqlite3")
+    assert journal.acquire_cycle_lease("owner-a", ttl_seconds=60) is True
+    assert journal.renew_cycle_lease("owner-a", ttl_seconds=60) is True
+    assert journal.acquire_cycle_lease("owner-b", ttl_seconds=60) is False
+    journal.release_cycle_lease("owner-a")
+    assert journal.acquire_cycle_lease("owner-b", ttl_seconds=60) is True
