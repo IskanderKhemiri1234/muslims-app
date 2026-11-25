@@ -2,7 +2,7 @@ name: Iskander AI Trade CI
 
 on:
   push:
-    branches: [main, foundation, deploy/infrlo-paper-v1]
+    branches: [main, foundation, deploy/infrlo-paper-v1, feature/binance-live-execution-v1]
   pull_request:
     branches: [main]
   workflow_dispatch:
