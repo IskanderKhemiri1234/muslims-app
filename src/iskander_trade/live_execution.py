@@ -157,8 +157,11 @@ class BinanceSpotExecution:
             raise OrderValidationError("Market order exceeds MAX_ORDER_QUOTE_USDT.")
         limits = market.get("limits") or {}
         minimum = (limits.get("amount") or {}).get("min")
+        minimum_cost = (limits.get("cost") or {}).get("min")
         if minimum is not None and formatted < Decimal(str(minimum)):
             raise OrderValidationError("Order amount is below Binance minimum.")
+        if minimum_cost is not None and formatted * Decimal(str(reference_price)) < Decimal(str(minimum_cost)):
+            raise OrderValidationError("Market order notional is below Binance minimum.")
         return self.exchange.create_order(
             normalized, "market", side, float(formatted), None,
             {"newClientOrderId": client_order_id},
