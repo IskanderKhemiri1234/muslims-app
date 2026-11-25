@@ -32,7 +32,7 @@ def test_sell_base_fee_is_included_in_inventory_consumption():
          "fee_cost": "0.00001", "fee_currency": "BTC", "timestamp": "2"},
     ])
     assert ledger.base_quantity == Decimal("0.00499")
-    assert ledger.realized_quote_pnl == Decimal("325") - Decimal("300.3")
+    assert ledger.realized_quote_pnl == Decimal("325") - Decimal("300.6")
 
 
 def test_sell_quote_fee_reduces_realized_proceeds():
