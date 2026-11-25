@@ -66,7 +66,7 @@ def test_position_limit_counts_pending_buy_reservations(tmp_path, monkeypatch):
                'open','2026-11-25T00:00:00+00:00','2026-11-25T00:00:00+00:00')"""
         )
     try:
-        service._risk_gate("BTC/USDT", "buy", Decimal("0.21"), Decimal("50"))
+        service._risk_gate("BTC/USDT", "buy", Decimal("0.21"), Decimal(50))
         assert False, "pending buy reservation must count toward position cap"
     except LiveOrderError:
         pass
@@ -89,7 +89,7 @@ def test_daily_loss_blocks_buys_but_does_not_block_manual_sell_exit(tmp_path, mo
                '-6','2026-11-25T12:00:00+00:00')"""
         )
     try:
-        service._risk_gate("BTC/USDT", "buy", Decimal("0.01"), Decimal("100"))
+        service._risk_gate("BTC/USDT", "buy", Decimal("0.01"), Decimal(100))
         assert False, "daily loss gate must block new buys"
     except LiveOrderError:
         pass
