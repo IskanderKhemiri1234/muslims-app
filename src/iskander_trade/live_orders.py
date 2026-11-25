@@ -136,16 +136,28 @@ class LiveManualOrderService:
             raise LiveOrderError("Risk limits are invalid; order rejected.")
         quote = amount * price
         with self._connect() as db:
-            open_count = db.execute(
-                "SELECT COUNT(*) AS n FROM live_orders WHERE status IN ('intent','open','partially_filled','unknown')"
-            ).fetchone()["n"]
+            open_rows = db.execute(
+                "SELECT symbol,side,amount,price FROM live_orders "
+                "WHERE status IN ('intent','open','partially_filled','unknown')"
+            ).fetchall()
+            open_count = len(open_rows)
+            pending_buy_quote = sum(
+                (Decimal(r["amount"]) * Decimal(r["price"] or "0")
+                 for r in open_rows if r["side"] == "buy" and r["symbol"] == symbol),
+                Decimal(0),
+            )
+            pending_sell_amount = sum(
+                (Decimal(r["amount"]) for r in open_rows
+                 if r["side"] == "sell" and r["symbol"] == symbol),
+                Decimal(0),
+            )
             day = datetime.now(UTC).date().isoformat()
             pnl_rows = db.execute(
                 "SELECT realized_pnl_quote FROM live_fills WHERE substr(occurred_at,1,10)=?",
                 (day,),
             ).fetchall()
             daily_pnl = sum((Decimal(r["realized_pnl_quote"]) for r in pnl_rows), Decimal(0))
-        if open_count >= max_open_orders:
+        if side == "buy" and open_count >= max_open_orders:
             raise LiveOrderError("Maximum number of open Live orders reached.")
         if side == "buy" and daily_pnl <= -max_daily_loss:
             raise LiveOrderError("Daily realized-loss limit reached; new buy orders are blocked.")
@@ -155,8 +167,16 @@ class LiveManualOrderService:
                     "SELECT amount FROM live_positions WHERE symbol=?", (symbol,)
                 ).fetchone()
             current_amount = Decimal(position["amount"]) if position else Decimal(0)
-            if (current_amount * price) + quote > max_position_quote:
-                raise LiveOrderError("Order would exceed MAX_POSITION_QUOTE_USDT.")
+            if (current_amount * price) + pending_buy_quote + quote > max_position_quote:
+                raise LiveOrderError("Order would exceed MAX_POSITION_QUOTE_USDT including pending buys.")
+        if side == "sell":
+            with self._connect() as db:
+                position = db.execute(
+                    "SELECT amount FROM live_positions WHERE symbol=?", (symbol,)
+                ).fetchone()
+            current_amount = Decimal(position["amount"]) if position else Decimal(0)
+            if pending_sell_amount + amount > current_amount:
+                raise LiveOrderError("Sell quantity plus pending sells exceeds the reconciled Spot position.")
         if quote <= 0:
             raise LiveOrderError("Order notional must be positive.")
 
