@@ -27,7 +27,7 @@ table{width:100%;border-collapse:collapse;min-width:480px}td,th{text-align:left;
 </head>
 <body><main>
 <header class="top">
- <div><h1>Iskander AI Trade</h1><div class="muted">Multi-market research · Spot · Paper mode</div><div class="tag" style="display:inline-block;margin-top:8px">PAPER ONLY · NO LIVE ORDERS</div></div>
+ <div><h1>Iskander AI Trade</h1><div class="muted">Multi-market research · Spot · Paper, Testnet and Manual Live</div><div class="tag" style="display:inline-block;margin-top:8px">MANUAL LIVE · DISARMED BY DEFAULT</div></div>
  <div class="auth">
   <div class="auth-line"><input id="token" type="password" autocomplete="current-password" placeholder="Dashboard access token" aria-label="Dashboard access token"><button id="connectBtn" onclick="connect()">Connect</button></div>
   <label class="remember"><input id="rememberToken" type="checkbox"> Remember token on this device</label>
@@ -77,7 +77,7 @@ table{width:100%;border-collapse:collapse;min-width:480px}td,th{text-align:left;
  <div class="scroll"><table><thead><tr><th>Market</th><th>Samples</th><th>Accuracy</th><th>Baseline</th><th>Assessment</th></tr></thead><tbody id="ml-results"><tr><td colspan="5">No evaluation run yet.</td></tr></tbody></table></div>
 </section>
 <section class="panel"><h2>Recent paper trades</h2><div class="scroll"><table><thead><tr><th>Market</th><th>Side</th><th>Price</th><th>Reason</th></tr></thead><tbody id="trades"><tr><td colspan="4">Connect to load trade history.</td></tr></tbody></table></div></section>
-<footer class="foot">Research and simulation only. This dashboard cannot submit exchange orders. On free hosting, the service may sleep during inactivity; local JSON state may be lost after some restarts or redeployments.</footer>
+<footer class="foot">Paper and Testnet are separate from Manual Live. Real Spot orders require server-side enablement, explicit arming and a per-order confirmation. On free hosting, the service may sleep during inactivity; local JSON state may be lost after some restarts or redeployments.</footer>
 </main>
 <script>
 const TOKEN_KEY="iskander_ai_trade_dashboard_token_v1";
