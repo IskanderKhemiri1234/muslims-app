@@ -57,6 +57,38 @@ class TestnetTradeService:
     def snapshot(self) -> dict[str, Any]:
         return self.journal.snapshot()
 
+    def preflight(self) -> dict[str, Any]:
+        """Verify authenticated Spot Testnet connectivity without placing an order."""
+        adapter = self._execution()
+        try:
+            balances = adapter.fetch_balance()
+            assets = {
+                asset: {
+                    "free": str(values.get("free", 0)),
+                    "used": str(values.get("used", 0)),
+                    "total": str(values.get("total", 0)),
+                }
+                for asset, values in balances.items()
+                if isinstance(values, dict)
+                and any(values.get(field) is not None for field in ("free", "used", "total"))
+                and Decimal(str(values.get("total") or "0")) > 0
+            }
+            prices = {
+                symbol: str(adapter.fetch_last_price(symbol))
+                for symbol in sorted(adapter.settings.allowed_symbols)
+            }
+            return {
+                "status": "connected",
+                "mode": "binance_spot_testnet",
+                "orders_submitted": False,
+                "allowed_symbols": sorted(adapter.settings.allowed_symbols),
+                "prices": prices,
+                "balances": assets,
+                "emergency_stop": self.journal.emergency_stopped(),
+            }
+        finally:
+            adapter.close()
+
     def cycle(self) -> dict[str, Any]:
         if not self._cycle_lock.acquire(blocking=False):
             raise RuntimeError("A Testnet monitor cycle is already running.")
