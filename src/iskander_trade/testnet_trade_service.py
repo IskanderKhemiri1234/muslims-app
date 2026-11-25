@@ -100,7 +100,20 @@ class TestnetTradeService:
                     stop = Decimal(trade["stop_loss_price"])
                     target = Decimal(trade["take_profit_price"])
                     if price <= stop or price >= target:
-                        amount = Decimal(position["amount"])
+                        # Spot sells are capped by both the journaled position and
+                        # Binance's currently free base-asset balance; never short.
+                        balances_now = adapter.fetch_balance()
+                        base_asset = symbol.split("/", maxsplit=1)[0]
+                        base_balance = balances_now.get(base_asset) or {}
+                        free_base = Decimal(str(base_balance.get("free") or "0"))
+                        amount = min(Decimal(position["amount"]), free_base)
+                        if amount <= 0:
+                            log.warning(
+                                "Exit signal for %s but no free %s balance is available.",
+                                symbol,
+                                base_asset,
+                            )
+                            continue
                         client_id = self.journal.create_order_intent(
                             trade_id=trade["trade_id"], symbol=symbol, side="sell",
                             amount=amount, price=None, order_type="market",
