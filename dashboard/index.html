@@ -81,7 +81,7 @@ table{width:100%;border-collapse:collapse;min-width:480px}td,th{text-align:left;
 </main>
 <script>
 const TOKEN_KEY="iskander_ai_trade_dashboard_token_v1";
-let token="", busyAction="";
+let token="", busyAction="", pendingLiveRequestId="";
 const el=id=>document.getElementById(id);
 function setStatus(message,type="idle"){el("statusText").textContent=message;el("statusDot").className="dot"+(type==="busy"?" busy":type==="good"?" good":type==="bad"?" bad":"")}
 function setBusy(action,on){busyAction=on?action:"";for(const id of ["cycleBtn","mlBtn","connectBtn"]){const b=el(id);b.disabled=!!busyAction&&id!==(action==="connect"?"connectBtn":action==="cycle"?"cycleBtn":"mlBtn");}
@@ -93,12 +93,39 @@ function loadSavedToken(){try{const saved=localStorage.getItem(TOKEN_KEY);if(sav
 function renderPortfolio(s){el("capital").textContent=Number(s.virtual_capital_usdt).toFixed(2)+" USDT";el("daily").textContent=Number(s.daily_pnl_usdt).toFixed(4)+" USDT";el("total").textContent=Number(s.total_realized_pnl_usdt).toFixed(4)+" USDT";el("positions").textContent=Object.keys(s.positions||{}).length;el("state-note").textContent="State storage: "+(s.state_persistence||"status available")+". Back up before redeploying.";
 el("trades").innerHTML=(s.trade_history||[]).slice().reverse().map(x=>"<tr><td>"+escapeHtml(x.symbol)+"</td><td>"+escapeHtml(x.side)+"</td><td>"+Number(x.price).toFixed(5)+"</td><td>"+escapeHtml(x.reason||"—")+"</td></tr>").join("")||"<tr><td colspan='4'>No trades yet</td></tr>";}
 function renderMarkets(m){el("markets").innerHTML=(m.markets||[]).map(x=>"<tr><td>"+escapeHtml(x.symbol)+"</td><td>"+escapeHtml(x.price??x.error??"—")+"</td></tr>").join("")||"<tr><td colspan='2'>No market data returned.</td></tr>";}
-async function connect(){token=el("token").value.trim();if(!token){setStatus("Enter the dashboard access token first.","bad");return}setBusy("connect",true);setStatus("Checking token and loading dashboard data…","busy");try{const [s,m]=await Promise.all([request("/api/v1/status"),request("/api/v1/markets")]);renderPortfolio(s);renderMarkets(m);await refreshTestnet();saveTokenChoice();el("lastUpdated").textContent="Updated "+new Date().toLocaleTimeString();setStatus("Connected. Portfolio and market data are up to date.","good");}catch(e){setStatus("Connection failed: "+e.message,"bad");}finally{setBusy("connect",false)}}
+async function connect(){token=el("token").value.trim();if(!token){setStatus("Enter the dashboard access token first.","bad");return}setBusy("connect",true);setStatus("Checking token and loading dashboard data…","busy");try{const [s,m]=await Promise.all([request("/api/v1/status"),request("/api/v1/markets")]);renderPortfolio(s);renderMarkets(m);await refreshTestnet();await refreshLive();saveTokenChoice();el("lastUpdated").textContent="Updated "+new Date().toLocaleTimeString();setStatus("Connected. Portfolio and market data are up to date.","good");}catch(e){setStatus("Connection failed: "+e.message,"bad");}finally{setBusy("connect",false)}}
 async function refreshDashboard(){if(!token){setStatus("Connect first to refresh portfolio data.","bad");return}el("refreshBtn").disabled=true;setStatus("Refreshing portfolio…","busy");try{const s=await request("/api/v1/status");renderPortfolio(s);await refreshTestnet();el("lastUpdated").textContent="Updated "+new Date().toLocaleTimeString();setStatus("Portfolio refreshed.","good");}catch(e){setStatus("Refresh failed: "+e.message,"bad");}finally{el("refreshBtn").disabled=false}}
 async function refreshMarkets(){if(!token){setStatus("Connect first to update prices.","bad");return}el("marketRefreshBtn").disabled=true;setStatus("Updating market prices…","busy");try{renderMarkets(await request("/api/v1/markets"));el("lastUpdated").textContent="Updated "+new Date().toLocaleTimeString();setStatus("Market prices updated.","good");}catch(e){setStatus("Price update failed: "+e.message,"bad");}finally{el("marketRefreshBtn").disabled=false}}
 async function runCycle(){if(!token){setStatus("Connect before running a paper cycle.","bad");return}setBusy("cycle",true);setStatus("Paper cycle running: requesting market candles and checking configured markets…","busy");try{const result=await request("/api/v1/paper/cycle",{method:"POST"});if(result.portfolio)renderPortfolio(result.portfolio);await refreshMarkets();el("lastUpdated").textContent="Completed "+new Date().toLocaleTimeString();setStatus("Paper cycle completed successfully. No live orders were sent.","good");}catch(e){setStatus("Paper cycle failed: "+e.message,"bad");}finally{setBusy("cycle",false)}}
 async 
-async function refreshTestnet(){const s=await request("/api/v1/testnet/trades");renderTestnet(s)}
+
+async function refreshLive(){
+ const s=await request("/api/v1/live/orders");
+ const tag=el("liveModeTag");
+ tag.textContent=s.emergency_stop?"LIVE STOPPED":s.manual_armed?"MANUAL LIVE ARMED":"LIVE DISARMED";
+ tag.style.color=s.emergency_stop?"var(--bad)":s.manual_armed?"var(--good)":"var(--gold)";
+ el("liveState").textContent="Manual armed: "+s.manual_armed+" · Emergency stop: "+s.emergency_stop+" · Daily realized P/L: "+s.daily_realized_pnl_quote+" quote units · Open positions: "+(s.positions||[]).length;
+ el("liveOrders").innerHTML=(s.orders||[]).map(o=>"<tr><td>"+escapeHtml(o.symbol)+"</td><td>"+escapeHtml(o.side)+"</td><td>"+escapeHtml(o.order_type)+"</td><td>"+escapeHtml(o.amount)+"</td><td>"+escapeHtml(o.filled)+"</td><td>"+escapeHtml(o.average||"—")+"</td><td>"+escapeHtml(o.status)+"</td><td>"+escapeHtml(o.client_order_id)+"</td></tr>").join("")||"<tr><td colspan='8'>No manual Live orders recorded.</td></tr>";
+ el("liveFills").innerHTML=(s.fills||[]).map(f=>"<tr><td>"+escapeHtml(f.symbol)+"</td><td>"+escapeHtml(f.side)+"</td><td>"+escapeHtml(f.amount)+"</td><td>"+escapeHtml(f.price)+"</td><td>"+escapeHtml(f.fee_cost)+"</td><td>"+escapeHtml(f.fee_currency||"—")+"</td><td>"+escapeHtml(f.realized_pnl_quote)+"</td></tr>").join("")||"<tr><td colspan='7'>No Live fills recorded.</td></tr>";
+}
+async function armLive(){try{await request("/api/v1/live/arm",{method:"POST"});await refreshLive();setStatus("Manual Live armed. No order has been sent yet.","good")}catch(e){setStatus("Live arm refused: "+e.message,"bad")}}
+async function disarmLive(){try{await request("/api/v1/live/disarm",{method:"POST"});await refreshLive();setStatus("Manual Live disarmed.","good")}catch(e){setStatus("Disarm failed: "+e.message,"bad")}}
+async function stopLive(){if(!confirm("EMERGENCY STOP: disarm manual Live and block new real-money orders?"))return;try{await request("/api/v1/live/emergency-stop",{method:"POST"});await refreshLive();setStatus("Live emergency stop is active.","good")}catch(e){setStatus("Emergency stop failed: "+e.message,"bad")}}
+async function releaseLiveStop(){if(!confirm("Release the persistent Live emergency stop? Manual trading remains disarmed until separately armed."))return;try{await request("/api/v1/live/emergency-stop/release",{method:"POST"});await refreshLive();setStatus("Live stop released; trading remains disarmed.","good")}catch(e){setStatus("Could not release Live stop: "+e.message,"bad")}}
+async function reconcileLive(){try{await request("/api/v1/live/reconcile",{method:"POST"});await refreshLive();setStatus("Live orders reconciled against Binance.","good")}catch(e){setStatus("Reconciliation incomplete. Do not retry uncertain orders: "+e.message,"bad")}}
+async function sendLiveOrder(){
+ const symbol=el("liveSymbol").value.trim(),side=el("liveSide").value,type=el("liveType").value,amount=el("liveAmount").value.trim(),price=el("livePrice").value.trim();
+ if(!symbol||!amount||(type==="limit"&&!price)){setStatus("Enter pair, quantity and a limit price for LIMIT orders.","bad");return}
+ const notional=type==="limit"?(Number(amount)*Number(price)):NaN;
+ const summary="REAL BINANCE SPOT ORDER\n"+side.toUpperCase()+" "+type.toUpperCase()+"\n"+symbol+" · quantity "+amount+(type==="limit"?" · limit "+price:" · market price")+(Number.isFinite(notional)?" · notional "+notional:"")+"\nThis may immediately use real funds. Submit?";
+ if(!confirm(summary))return;
+ if(!pendingLiveRequestId)pendingLiveRequestId=(crypto.randomUUID?crypto.randomUUID():("req-"+Date.now()+"-"+Math.random().toString(16).slice(2)));
+ const payload={request_id:pendingLiveRequestId,symbol,side,order_type:type,amount,price:type==="limit"?price:null};
+ setStatus("Submitting manual Live order. Do not repeat if the response is uncertain; reconcile first.","busy");
+ try{await request("/api/v1/live/orders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});pendingLiveRequestId="";await refreshLive();setStatus("Order request recorded. Verify exchange order status and fills in the Live journal.","good")}
+ catch(e){setStatus("Order response uncertain or rejected: "+e.message+". Keep the request id and reconcile before retrying.","bad")}
+}
+\nasync function refreshTestnet(){const s=await request("/api/v1/testnet/trades");renderTestnet(s)}
 function renderTestnet(s){
  const trades=s.trades||[],orders=s.orders||[],positions=s.positions||[];
  el("testnetTrades").innerHTML=trades.map(t=>"<tr><td>"+escapeHtml(t.symbol)+"</td><td>"+escapeHtml(t.quantity)+"</td><td>"+escapeHtml(t.entry_price)+"</td><td>"+escapeHtml(t.stop_loss_price)+"</td><td>"+escapeHtml(t.take_profit_price)+"</td><td>"+escapeHtml(t.status)+(t.enabled?" · armed":"")+"</td><td><button class='secondary' onclick=\"tradeControl('"+escapeHtml(t.trade_id)+"','"+(t.enabled?"pause":"enable")+"')\">"+(t.enabled?"Pause":"Arm")+"</button></td></tr>").join("")||"<tr><td colspan='7'>No configured Testnet trades.</td></tr>";
