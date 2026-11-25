@@ -117,14 +117,15 @@ class LiveManualOrderService:
             "orders_enabled": self._armed() and not self.control.stopped(),
         }
 
-    def _risk_gate(self, symbol: str, amount: Decimal, price: Decimal) -> None:
+    def _risk_gate(self, symbol: str, side: str, amount: Decimal, price: Decimal) -> None:
         if not self._truth("ENABLE_LIVE_TRADING") or not self._truth("LIVE_MANUAL_ORDERS_ENABLED"):
             raise LiveOrderError("Live order submission is disabled by server configuration.")
         if not self._armed() or self.control.stopped():
             raise LiveOrderError("Manual Live trading is not armed or emergency stop is active.")
         max_daily_loss = Decimal(os.getenv("MAX_DAILY_LOSS_QUOTE", "5"))
+        max_position_quote = Decimal(os.getenv("MAX_POSITION_QUOTE_USDT", "25"))
         max_open_orders = int(os.getenv("MAX_OPEN_LIVE_ORDERS", "3"))
-        if max_daily_loss <= 0 or max_open_orders < 1:
+        if max_daily_loss <= 0 or max_position_quote <= 0 or max_open_orders < 1:
             raise LiveOrderError("Risk limits are invalid; order rejected.")
         quote = amount * price
         with self._connect() as db:
@@ -138,8 +139,16 @@ class LiveManualOrderService:
             ).fetchone()["pnl"]))
         if open_count >= max_open_orders:
             raise LiveOrderError("Maximum number of open Live orders reached.")
-        if daily_pnl <= -max_daily_loss:
-            raise LiveOrderError("Daily realized-loss limit reached; Live orders are blocked.")
+        if side == "buy" and daily_pnl <= -max_daily_loss:
+            raise LiveOrderError("Daily realized-loss limit reached; new buy orders are blocked.")
+        if side == "buy":
+            with self._connect() as db:
+                position = db.execute(
+                    "SELECT amount FROM live_positions WHERE symbol=?", (symbol,)
+                ).fetchone()
+            current_amount = Decimal(position["amount"]) if position else Decimal(0)
+            if (current_amount * price) + quote > max_position_quote:
+                raise LiveOrderError("Order would exceed MAX_POSITION_QUOTE_USDT.")
         if quote <= 0:
             raise LiveOrderError("Order notional must be positive.")
 
@@ -164,12 +173,20 @@ class LiveManualOrderService:
             normalized = symbol.strip().upper()
             reference = Decimal(str(price)) if price else adapter.fetch_last_price(normalized)
             qty = Decimal(str(amount))
-            self._risk_gate(normalized, qty, reference)
+            self._risk_gate(normalized, side, qty, reference)
             # Validate against exchange precision and notional before writing intent.
-            if order_type == "limit":
-                adapter._validate(normalized, side, qty, reference)
-            else:
-                adapter._validate(normalized, side, qty, reference)
+            adapter._validate(normalized, side, qty, reference)
+            if side == "sell":
+                base_asset = normalized.split("/", maxsplit=1)[0]
+                with self._connect() as db:
+                    position_row = db.execute(
+                        "SELECT amount FROM live_positions WHERE symbol=?", (normalized,)
+                    ).fetchone()
+                tracked = Decimal(position_row["amount"]) if position_row else Decimal(0)
+                balances = adapter.fetch_balance()
+                free_base = Decimal(str((balances.get(base_asset) or {}).get("free") or "0"))
+                if qty > tracked or qty > free_base:
+                    raise LiveOrderError("Sell quantity exceeds the locally reconciled position or free Spot balance.")
             now = datetime.now(UTC).isoformat()
             with self._lock, self._connect() as db:
                 db.execute("BEGIN IMMEDIATE")
