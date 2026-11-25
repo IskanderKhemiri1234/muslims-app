@@ -125,7 +125,10 @@ class TestnetTradeService:
                             known["symbol"], exchange_order_id
                         )
                         self.journal.record_fills(known["client_order_id"], fills)
-                        if order.get("status") in {"closed", "canceled", "rejected", "expired"}:
+                        if (
+                            order.get("status") in {"closed", "canceled", "rejected", "expired"}
+                            and self.journal.order_fills_complete(known["client_order_id"])
+                        ):
                             self.journal.mark_fills_synced(known["client_order_id"])
                 except ccxt.BaseError as exc:
                     # Missing/temporarily unavailable exchange state remains unresolved.
@@ -243,6 +246,13 @@ class TestnetTradeService:
                                     self.journal.record_fills(
                                         pending_buy["client_order_id"], late_fills
                                     )
+                                    if not self.journal.order_fills_complete(
+                                        pending_buy["client_order_id"]
+                                    ):
+                                        raise RuntimeError(
+                                            "Final fill history is incomplete after cancel; "
+                                            "exit is blocked until reconciliation completes."
+                                        )
                                     self.journal.mark_fills_synced(
                                         pending_buy["client_order_id"]
                                     )
