@@ -96,3 +96,14 @@ def test_partial_buy_then_take_profit_sell(tmp_path, monkeypatch):
     assert result["actions"][0]["action"] == "take_profit"
     assert Decimal(result["positions"][0]["amount"]) == 0
     assert result["realizations"]
+
+
+def test_emergency_stop_blocks_new_entries_but_keeps_balance_sync(tmp_path, monkeypatch):
+    service, trade, adapter = _armed_service(tmp_path, monkeypatch, "59000")
+    service.emergency_stop("test emergency")
+    result = service.cycle()
+    assert result["status"] == "halted"
+    assert result["actions"] == []
+    assert adapter.market_sides == []
+    assert result["balances"]
+    assert service.journal.emergency_stopped() is True
