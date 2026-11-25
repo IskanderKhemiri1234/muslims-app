@@ -175,6 +175,23 @@ class TradeJournal:
             db.commit()
             return acquired
 
+    def renew_cycle_lease(
+        self, owner_id: str, *, lease_key: str = "binance_testnet_monitor",
+        ttl_seconds: int = 300,
+    ) -> bool:
+        if not owner_id or ttl_seconds < 30:
+            raise ValueError("A lease owner and at least 30 seconds TTL are required.")
+        now = datetime.now(UTC).timestamp()
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            cursor = db.execute(
+                """UPDATE cycle_leases SET expires_at=?
+                   WHERE lease_key=? AND owner_id=? AND expires_at>?""",
+                (now + ttl_seconds, lease_key, owner_id, now),
+            )
+            db.commit()
+            return cursor.rowcount == 1
+
     def release_cycle_lease(
         self, owner_id: str, *, lease_key: str = "binance_testnet_monitor"
     ) -> None:
