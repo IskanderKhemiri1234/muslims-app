@@ -206,7 +206,7 @@ class TestnetTradeService:
                             "action": "stop_loss" if price <= stop else "take_profit",
                             "client_order_id": client_id,
                         })
-                elif price <= Decimal(trade["entry_price"]):
+                elif not any(item["side"] == "buy" for item in pending) and price <= Decimal(trade["entry_price"]):
                     client_id = self.journal.create_order_intent(
                         trade_id=trade["trade_id"], symbol=symbol, side="buy",
                         amount=trade["quantity"], price=trade["entry_price"],
