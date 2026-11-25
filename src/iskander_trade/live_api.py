@@ -29,7 +29,7 @@ def live_status() -> dict[str, Any]:
     return service.status()
 
 
-@router.get("/preflight", dependencies=[Depends(__import__("iskander_trade.api", fromlist=["require_dashboard_token"]).require_dashboard_token)])
+@router.get("/preflight", dependencies=[Depends(_require_dashboard_token)])
 def live_preflight() -> dict[str, Any]:
     try:
         return service.preflight()
