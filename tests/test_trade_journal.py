@@ -56,3 +56,44 @@ def test_invalid_quantities_are_rejected(tmp_path):
             symbol="BTC/USDT", quantity="NaN", entry_price="100",
             stop_loss_price="90", take_profit_price="110",
         )
+
+
+def test_partial_fill_updates_position_incrementally_without_double_counting(tmp_path):
+    journal = TradeJournal(tmp_path / "journal.sqlite3")
+    trade = journal.create_trade(
+        symbol="BTC/USDT", quantity="0.01", entry_price="60000",
+        stop_loss_price="58000", take_profit_price="65000",
+    )
+    client_id = journal.create_order_intent(
+        trade_id=trade["trade_id"], symbol="BTC/USDT", side="buy",
+        amount="0.01", price="60000",
+    )
+    partial = {"id": "exchange-1", "filled": "0.004", "remaining": "0.006",
+               "average": "60000", "status": "open"}
+    journal.update_order(client_id, partial)
+    journal.update_order(client_id, partial)
+    position = journal.snapshot()["positions"][0]
+    assert position["amount"] == "0.004"
+    assert position["average_entry"] == "60000"
+    assert journal.pending_orders()[0]["status"] == "partially_filled"
+
+
+def test_additional_fill_only_applies_the_new_cumulative_delta(tmp_path):
+    journal = TradeJournal(tmp_path / "journal.sqlite3")
+    trade = journal.create_trade(
+        symbol="ETH/USDT", quantity="0.2", entry_price="3000",
+        stop_loss_price="2800", take_profit_price="3300",
+    )
+    client_id = journal.create_order_intent(
+        trade_id=trade["trade_id"], symbol="ETH/USDT", side="buy",
+        amount="0.2", price="3000",
+    )
+    journal.update_order(client_id, {
+        "id": "exchange-2", "filled": "0.05", "remaining": "0.15",
+        "average": "3000", "status": "open",
+    })
+    journal.update_order(client_id, {
+        "id": "exchange-2", "filled": "0.08", "remaining": "0.12",
+        "average": "3010", "status": "open",
+    })
+    assert journal.snapshot()["positions"][0]["amount"] == "0.08"
