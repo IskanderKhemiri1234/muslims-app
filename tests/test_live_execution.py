@@ -32,7 +32,7 @@ def test_live_and_testnet_flags_cannot_be_enabled_together():
         api_secret="test-secret",
         testnet=True,
         live_enabled=True,
-        max_order_quote=Decimal("10"),
+        max_order_quote=Decimal(10),
         allowed_symbols=frozenset({"BTC/USDT"}),
     )
     with pytest.raises(ExecutionDisabled, match="Conflicting flags"):
@@ -45,7 +45,7 @@ def test_live_mode_fails_closed_without_explicit_enable_flag():
         api_secret="test-secret",
         testnet=False,
         live_enabled=False,
-        max_order_quote=Decimal("10"),
+        max_order_quote=Decimal(10),
         allowed_symbols=frozenset({"BTC/USDT"}),
     )
     with pytest.raises(ExecutionDisabled, match="Live trading is disabled"):
