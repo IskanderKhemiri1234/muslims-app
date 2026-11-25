@@ -166,6 +166,18 @@ class BinanceSpotExecution:
             None, normalized, {"origClientOrderId": client_order_id}
         )
 
+    def fetch_my_trades_for_order(
+        self, symbol: str, exchange_order_id: str, since: int | None = None
+    ) -> list[dict[str, Any]]:
+        normalized = symbol.strip().upper()
+        if normalized not in self.settings.allowed_symbols:
+            raise OrderValidationError("Symbol is not in BINANCE_ALLOWED_SYMBOLS.")
+        if not exchange_order_id:
+            return []
+        return self.exchange.fetch_my_trades(
+            normalized, since, 1000, {"orderId": exchange_order_id}
+        )
+
     def fetch_balance(self) -> dict[str, Any]:
         return self.exchange.fetch_balance()
 
