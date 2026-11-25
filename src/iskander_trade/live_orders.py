@@ -290,6 +290,29 @@ class LiveManualOrderService:
                 )
             db.commit()
 
+
+    def cancel(self, client_order_id: str) -> dict[str, Any]:
+        client_order_id = client_order_id.strip()
+        if not client_order_id:
+            raise LiveOrderError("Client order id is required.")
+        with self._connect() as db:
+            row = db.execute(
+                "SELECT symbol,status FROM live_orders WHERE client_order_id=?",
+                (client_order_id,),
+            ).fetchone()
+        if not row:
+            raise LiveOrderError("Live order was not found in the durable journal.")
+        adapter = BinanceSpotExecution()
+        try:
+            if adapter.settings.testnet or not adapter.settings.live_enabled:
+                raise ExecutionDisabled("The adapter is not configured for Spot Live.")
+            order = adapter.cancel_order_by_client_id(client_order_id, row["symbol"])
+            self._save_order(client_order_id, order)
+            self._sync_fills(adapter, client_order_id, row["symbol"], order)
+            return self.status()
+        finally:
+            adapter.close()
+
     def reconcile(self) -> dict[str, Any]:
         adapter = BinanceSpotExecution()
         try:
