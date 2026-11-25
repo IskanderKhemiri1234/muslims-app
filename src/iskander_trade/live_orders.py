@@ -91,9 +91,28 @@ class LiveManualOrderService:
         return self.status()
 
     def emergency_stop(self) -> dict[str, Any]:
+        # Latch the stop before attempting network cancellation so new orders
+        # are blocked even if Binance is unavailable.
         self.disarm()
         self.control.set_stopped(True)
-        return self.status()
+        with self._connect() as db:
+            pending = [r["client_order_id"] for r in db.execute(
+                "SELECT client_order_id FROM live_orders "
+                "WHERE status IN ('intent','open','partially_filled','unknown')"
+            )]
+        canceled: list[str] = []
+        unresolved: list[str] = []
+        for client_id in pending:
+            try:
+                self.cancel(client_id)
+                canceled.append(client_id)
+            except (ccxt.BaseError, LiveOrderError, ExecutionDisabled, ValueError, sqlite3.Error):
+                unresolved.append(client_id)
+        snapshot = self.status()
+        snapshot["emergency_cancel_attempted"] = len(pending)
+        snapshot["emergency_cancel_resolved"] = canceled
+        snapshot["emergency_cancel_unresolved"] = unresolved
+        return snapshot
 
     def status(self) -> dict[str, Any]:
         with self._connect() as db:
@@ -224,6 +243,12 @@ class LiveManualOrderService:
             self._risk_gate(normalized, side, qty, reference)
             # Validate against exchange precision and notional before writing intent.
             adapter._validate(normalized, side, qty, reference)
+            if side == "buy":
+                quote_asset = normalized.split("/", maxsplit=1)[1]
+                balances = adapter.fetch_balance()
+                free_quote = Decimal(str((balances.get(quote_asset) or {}).get("free") or "0"))
+                if qty * reference > free_quote:
+                    raise LiveOrderError("Buy notional exceeds the free quote-asset balance.")
             if side == "sell":
                 base_asset = normalized.split("/", maxsplit=1)[0]
                 with self._connect() as db:
