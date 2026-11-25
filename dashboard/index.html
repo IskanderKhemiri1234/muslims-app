@@ -57,6 +57,7 @@ table{width:100%;border-collapse:collapse;min-width:480px}td,th{text-align:left;
   <input id="tradeTarget" inputmode="decimal" aria-label="Take profit price" placeholder="Take profit">
  </div>
  <div class="button-row" style="margin-top:12px">
+  <button class="secondary" onclick="runTestnetPreflight()">Check Binance Testnet connection</button>
   <button onclick="createTestnetTrade()">Save trade settings</button>
   <button class="secondary" onclick="refreshTestnet()">Refresh Testnet state</button>
   <button class="secondary" onclick="runTestnetCycle()">Run Testnet monitor cycle</button>
@@ -108,6 +109,14 @@ async function refreshDashboard(){if(!token){setStatus("Connect first to refresh
 async function refreshMarkets(){if(!token){setStatus("Connect first to update prices.","bad");return}el("marketRefreshBtn").disabled=true;setStatus("Updating market prices…","busy");try{renderMarkets(await request("/api/v1/markets"));el("lastUpdated").textContent="Updated "+new Date().toLocaleTimeString();setStatus("Market prices updated.","good");}catch(e){setStatus("Price update failed: "+e.message,"bad");}finally{el("marketRefreshBtn").disabled=false}}
 async function runCycle(){if(!token){setStatus("Connect before running a paper cycle.","bad");return}setBusy("cycle",true);setStatus("Paper cycle running: requesting market candles and checking configured markets…","busy");try{const result=await request("/api/v1/paper/cycle",{method:"POST"});if(result.portfolio)renderPortfolio(result.portfolio);await refreshMarkets();el("lastUpdated").textContent="Completed "+new Date().toLocaleTimeString();setStatus("Paper cycle completed successfully. No live orders were sent.","good");}catch(e){setStatus("Paper cycle failed: "+e.message,"bad");}finally{setBusy("cycle",false)}}
 async 
+async function runTestnetPreflight(){
+ try{
+  setStatus("Checking authenticated Binance Spot Testnet connection (read-only)…","busy");
+  const result=await request("/api/v1/testnet/preflight");
+  setStatus("Testnet connected · "+(result.allowed_symbols||[]).join(", ")+" · no orders submitted.","good");
+  await refreshTestnet();
+ }catch(e){setStatus("Testnet preflight failed: "+e.message,"bad")}
+}
 async function refreshTestnet(){const s=await request("/api/v1/testnet/trades");renderTestnet(s)}
 function renderTestnet(s){
  const trades=s.trades||[],orders=s.orders||[],positions=s.positions||[],fills=s.fills||[];
