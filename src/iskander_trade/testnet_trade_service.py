@@ -106,19 +106,21 @@ class TestnetTradeService:
                                     "action": "entry_limit", "client_order_id": client_id})
 
             balances = adapter.fetch_balance()
+            normalized_balances = {
+                key: {"free": str(value.get("free", 0)), "used": str(value.get("used", 0)),
+                      "total": str(value.get("total", 0))}
+                for key, value in balances.items()
+                if isinstance(value, dict) and any(
+                    value.get(field) is not None for field in ("free", "used", "total")
+                )
+            }
+            self.journal.save_balance_snapshot(normalized_balances)
             snapshot = self.journal.snapshot()
             return {
                 "status": "completed",
                 "mode": "binance_spot_testnet",
                 "actions": actions,
-                "balances": {
-                    key: {"free": str(value.get("free", 0)), "used": str(value.get("used", 0)),
-                          "total": str(value.get("total", 0))}
-                    for key, value in balances.items()
-                    if isinstance(value, dict) and any(
-                        value.get(field) is not None for field in ("free", "used", "total")
-                    )
-                },
+                "balances": snapshot["balances"],
                 **snapshot,
             }
         finally:
