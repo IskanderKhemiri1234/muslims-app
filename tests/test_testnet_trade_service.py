@@ -82,7 +82,7 @@ def test_partial_buy_then_stop_loss_sell_survives_service_restart(tmp_path, monk
     adapter.price = Decimal("57900")
     second = restarted.cycle()
     assert second["actions"][0]["action"] == "stop_loss"
-    assert second["positions"][0]["amount"] == "0"
+    assert Decimal(second["positions"][0]["amount"]) == Decimal(0)
     assert adapter.market_sides == ["buy", "sell"]
     assert second["fills"]
     assert second["balances"]
