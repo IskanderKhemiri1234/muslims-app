@@ -592,7 +592,9 @@ class TradeJournal:
                 "trades": trades,
                 "orders": orders,
                 "fills": [dict(r) for r in db.execute(
-                    "SELECT * FROM fills ORDER BY occurred_at DESC LIMIT 500"
+                    """SELECT f.*,o.side,o.symbol FROM fills f
+                       JOIN orders o ON o.client_order_id=f.client_order_id
+                       ORDER BY f.occurred_at DESC LIMIT 500"""
                 )],
                 "realizations": [dict(r) for r in db.execute(
                     "SELECT * FROM trade_realizations ORDER BY occurred_at DESC LIMIT 500"
