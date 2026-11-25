@@ -1,6 +1,7 @@
 """Manually submitted Binance Spot Live orders with fail-closed controls."""
 from __future__ import annotations
 
+import hashlib
 import os
 import sqlite3
 import threading
@@ -29,7 +30,7 @@ class LiveManualOrderService:
         with self._connect() as db:
             db.executescript("""
                 CREATE TABLE IF NOT EXISTS live_orders(
-                    client_order_id TEXT PRIMARY KEY, exchange_order_id TEXT,
+                    client_order_id TEXT PRIMARY KEY, request_id TEXT UNIQUE, exchange_order_id TEXT,
                     symbol TEXT NOT NULL, side TEXT NOT NULL, order_type TEXT NOT NULL,
                     amount TEXT NOT NULL, price TEXT, filled TEXT NOT NULL DEFAULT '0',
                     average TEXT, status TEXT NOT NULL, created_at TEXT NOT NULL,
@@ -50,6 +51,10 @@ class LiveManualOrderService:
                 );
                 INSERT OR IGNORE INTO live_flags(name,value) VALUES('manual_armed','0');
             """)
+            cols = {row["name"] for row in db.execute("PRAGMA table_info(live_orders)")}
+            if "request_id" not in cols:
+                db.execute("ALTER TABLE live_orders ADD COLUMN request_id TEXT")
+                db.execute("CREATE UNIQUE INDEX IF NOT EXISTS live_orders_request_id_idx ON live_orders(request_id)")
 
     def _connect(self) -> sqlite3.Connection:
         db = sqlite3.connect(self.path, timeout=20)
@@ -138,14 +143,21 @@ class LiveManualOrderService:
         if quote <= 0:
             raise LiveOrderError("Order notional must be positive.")
 
-    def submit(self, *, symbol: str, side: str, order_type: str,
+    def submit(self, *, request_id: str, symbol: str, side: str, order_type: str,
                amount: str, price: str | None = None) -> dict[str, Any]:
+        request_id = request_id.strip()
+        if not request_id or len(request_id) > 128:
+            raise LiveOrderError("A unique client request id is required.")
+        with self._connect() as db:
+            prior = db.execute("SELECT client_order_id FROM live_orders WHERE request_id=?", (request_id,)).fetchone()
+        if prior:
+            return self.status()
         if side not in {"buy", "sell"} or order_type not in {"limit", "market"}:
             raise LiveOrderError("Only manual Spot buy/sell limit or market orders are supported.")
         if order_type == "limit" and not price:
             raise LiveOrderError("A limit order requires a limit price.")
         adapter = BinanceSpotExecution()
-        client_id = "isk" + uuid.uuid4().hex[:30]
+        client_id = "isk" + hashlib.sha256(request_id.encode("utf-8")).hexdigest()[:30]
         try:
             if adapter.settings.testnet or not adapter.settings.live_enabled:
                 raise ExecutionDisabled("The adapter is not configured for Spot Live.")
@@ -162,10 +174,10 @@ class LiveManualOrderService:
             with self._lock, self._connect() as db:
                 db.execute("BEGIN IMMEDIATE")
                 db.execute(
-                    """INSERT INTO live_orders(client_order_id,symbol,side,order_type,
+                    """INSERT INTO live_orders(client_order_id,request_id,symbol,side,order_type,
                        amount,price,status,created_at,updated_at)
-                       VALUES(?,?,?,?,?,?,'intent',?,?)""",
-                    (client_id, normalized, side, order_type, str(qty),
+                       VALUES(?,?,?,?,?,?,?,'intent',?,?)""",
+                    (client_id, request_id, normalized, side, order_type, str(qty),
                      str(reference) if order_type == "limit" else None, now, now),
                 )
                 db.commit()
