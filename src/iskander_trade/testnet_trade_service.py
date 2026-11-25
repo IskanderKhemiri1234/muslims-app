@@ -210,11 +210,12 @@ class TestnetTradeService:
                 }
 
             state = self.journal.snapshot()
-            if state.get("accounting_issues"):
+            if state.get("accounting_issues") or state.get("balance_issues"):
                 return {
                     "status": "halted",
-                    "reason": "fill_history_unreconciled",
-                    "accounting_issues": state["accounting_issues"],
+                    "reason": "fill_or_balance_reconciliation_failed",
+                    "accounting_issues": state.get("accounting_issues", []),
+                    "balance_issues": state.get("balance_issues", []),
                     "actions": [],
                     "mode": "binance_spot_testnet",
                     **state,
