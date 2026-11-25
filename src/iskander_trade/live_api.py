@@ -20,6 +20,7 @@ orders = LiveManualOrderService()
 
 
 class ManualOrderRequest(BaseModel):
+    request_id: str = Field(min_length=8, max_length=128)
     symbol: str = Field(min_length=3, max_length=24)
     side: str
     order_type: str
@@ -82,6 +83,7 @@ def release_live_emergency_stop() -> dict[str, Any]:
 def submit_manual_live_order(payload: ManualOrderRequest) -> dict[str, Any]:
     try:
         return orders.submit(
+            request_id=payload.request_id,
             symbol=payload.symbol,
             side=payload.side,
             order_type=payload.order_type,
