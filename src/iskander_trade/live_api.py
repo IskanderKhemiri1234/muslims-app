@@ -1,4 +1,4 @@
-"""Authenticated, read-only Binance Live safety endpoints."""
+"""Authenticated Binance Spot Live manual-order API."""
 from __future__ import annotations
 
 import hmac
