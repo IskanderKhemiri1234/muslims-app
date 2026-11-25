@@ -25,3 +25,14 @@ jobs:
         run: pytest -q
       - name: Lint
         run: ruff check src tests
+      - name: Package isolated SillyDev Testnet deployment
+        run: |
+          mkdir -p dist
+          git archive --format=zip --prefix=iskander-ai-trade-testnet-v2/ HEAD -o dist/iskander-ai-trade-testnet-v2.zip
+      - name: Upload SillyDev deployment bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: iskander-ai-trade-testnet-v2
+          path: dist/iskander-ai-trade-testnet-v2.zip
+          if-no-files-found: error
+          retention-days: 14
