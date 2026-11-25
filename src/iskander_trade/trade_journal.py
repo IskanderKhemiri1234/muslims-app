@@ -314,6 +314,61 @@ class TradeJournal:
                 "SELECT * FROM orders WHERE status IN ('intent','open','partially_filled')"
             ).fetchall()]
 
+    def record_fills(self, client_order_id: str, fills: list[dict[str, Any]]) -> int:
+        """Persist exchange fills idempotently; position quantity remains driven by
+        cumulative order status so replaying a trade-history page cannot double count.
+        """
+        inserted = 0
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            order = db.execute(
+                "SELECT trade_id FROM orders WHERE client_order_id=?",
+                (client_order_id,),
+            ).fetchone()
+            if not order:
+                db.rollback()
+                raise KeyError("order intent not found")
+            for fill in fills:
+                info = fill.get("info") if isinstance(fill.get("info"), dict) else {}
+                fill_id = fill.get("id") or info.get("id") or info.get("tradeId")
+                if fill_id is None:
+                    continue
+                amount = _positive(fill.get("amount") or info.get("qty") or "0", "fill.amount")
+                price = _positive(fill.get("price") or info.get("price") or "0", "fill.price")
+                fee = fill.get("fee") if isinstance(fill.get("fee"), dict) else {}
+                fee_cost = fee.get("cost")
+                fee_currency = fee.get("currency")
+                if fee_cost is None:
+                    commissions = info.get("commission")
+                    fee_cost = commissions if commissions is not None else "0"
+                    fee_currency = fee_currency or info.get("commissionAsset")
+                fee_value = _positive(fee_cost, "fill.fee", allow_zero=True)
+                occurred = fill.get("datetime") or _now()
+                key = f"{client_order_id}:{fill_id}"
+                cursor = db.execute(
+                    """INSERT OR IGNORE INTO fills
+                       (fill_key,trade_id,client_order_id,amount,price,fee_cost,fee_currency,occurred_at)
+                       VALUES(?,?,?,?,?,?,?,?)""",
+                    (key, order["trade_id"], client_order_id, amount, price,
+                     fee_value, fee_currency, str(occurred)),
+                )
+                inserted += cursor.rowcount
+            if inserted:
+                db.execute(
+                    "INSERT INTO audit_events(trade_id,event_type,detail_json,occurred_at) VALUES(?,?,?,?)",
+                    (order["trade_id"], "exchange_fills_recorded",
+                     json.dumps({"client_order_id": client_order_id, "new_fills": inserted}), _now()),
+                )
+            db.commit()
+        return inserted
+
+    def recent_orders(self, limit: int = 200) -> list[dict[str, Any]]:
+        with self._connect() as db:
+            return [dict(row) for row in db.execute(
+                "SELECT * FROM orders ORDER BY created_at DESC LIMIT ?",
+                (max(1, min(limit, 1000)),),
+            ).fetchall()]
+
     def save_balance_snapshot(self, balances: dict[str, Any]) -> None:
         now = _now()
         with self._lock, self._connect() as db:
@@ -348,6 +403,9 @@ class TradeJournal:
                 )],
                 "orders": [dict(r) for r in db.execute(
                     "SELECT * FROM orders ORDER BY created_at DESC LIMIT 200"
+                )],
+                "fills": [dict(r) for r in db.execute(
+                    "SELECT * FROM fills ORDER BY occurred_at DESC LIMIT 500"
                 )],
                 "positions": [dict(r) for r in db.execute("SELECT * FROM positions")],
                 "emergency_stop": self.emergency_stopped(),
