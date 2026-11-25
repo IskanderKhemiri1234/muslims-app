@@ -43,6 +43,7 @@ class MainActivity : Activity() {
     private lateinit var liveSymbol: EditText
     private lateinit var liveAmount: EditText
     private lateinit var livePrice: EditText
+    private lateinit var liveCancelId: EditText
     private lateinit var liveSide: Spinner
     private lateinit var liveType: Spinner
     private lateinit var tradeSymbol: EditText
@@ -192,6 +193,7 @@ class MainActivity : Activity() {
         body.addView(label("Public market data · Authenticated account · Paper execution only", 11f, muted), params())
         scroll.addView(body); root.addView(scroll); setContentView(root)
         render(s, m)
+        refreshLiveState()
     }
 
     private fun render(s: JSONObject, m: JSONObject) {
@@ -323,6 +325,7 @@ class MainActivity : Activity() {
         liveSymbol = decimalField("Pair, e.g. BTC/USDT").apply { setText("BTC/USDT"); inputType = 1 }
         liveAmount = decimalField("Base quantity")
         livePrice = decimalField("Limit price (required for LIMIT)")
+        liveCancelId = decimalField("Client order ID to cancel")
         liveSide = Spinner(this).apply {
             adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, listOf("BUY", "SELL"))
         }
@@ -334,6 +337,7 @@ class MainActivity : Activity() {
         box.addView(liveType, params())
         box.addView(liveAmount, params())
         box.addView(livePrice, params())
+        box.addView(liveCancelId, params())
         box.addView(makeButton("Refresh Live orders and fills") { refreshLiveState() }, params())
         box.addView(makeButton("Arm manual Live") { liveAction("/api/v1/live/arm", "Manual Live armed. No order has been sent.") }, params())
         box.addView(makeButton("Disarm manual Live") { liveAction("/api/v1/live/disarm", "Manual Live disarmed.") }, params())
@@ -352,6 +356,20 @@ class MainActivity : Activity() {
                 .show()
         }, params())
         box.addView(makeButton("Review and submit REAL order") { reviewLiveOrder() }, params())
+        box.addView(makeButton("Cancel selected Live order") {
+            val id = liveCancelId.text.toString().trim()
+            if (id.isBlank()) {
+                liveState.text = "Enter the client order ID first."
+                liveState.setTextColor(red)
+            } else {
+                AlertDialog.Builder(this).setTitle("Cancel Live order?")
+                    .setMessage("Cancel " + id + " and reconcile any partial fills?")
+                    .setNegativeButton("Cancel", null)
+                    .setPositiveButton("Confirm cancellation") { _, _ ->
+                        liveAction("/api/v1/live/orders/" + id + "/cancel", "Cancel request completed; verify final status.")
+                    }.show()
+            }
+        }, params())
         box.addView(makeButton("Reconcile Live orders") { liveAction("/api/v1/live/reconcile", "Reconciliation request completed; verify journal.") }, params())
         liveState = label("Live state not loaded. Emergency stop is expected to be ACTIVE.", 12f, gold)
         box.addView(liveState, params())
