@@ -107,13 +107,20 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun api(path: String, method: String = "GET", auth: Boolean = true): JSONObject {
+    private fun api(path: String, method: String = "GET", auth: Boolean = true,
+                    payload: JSONObject? = null): JSONObject {
         val c = URL(baseUrl + path).openConnection() as HttpURLConnection
         try {
             c.requestMethod = method; c.connectTimeout = 12000; c.readTimeout = 15000
             c.setRequestProperty("Accept", "application/json")
             if (auth) c.setRequestProperty("Authorization", "Bearer " + token)
-            if (method == "POST") c.doOutput = true
+            if (method == "POST") {
+                c.doOutput = true
+                if (payload != null) {
+                    c.setRequestProperty("Content-Type", "application/json")
+                    c.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+                }
+            }
             val code = c.responseCode
             val stream = if (code in 200..299) c.inputStream else c.errorStream
             val body = stream?.bufferedReader()?.use { it.readText() } ?: ""
@@ -225,6 +232,26 @@ class MainActivity : Activity() {
         for (i in (history.length() - 1 downTo maxOf(0, history.length() - 10))) {
             val t = history.optJSONObject(i) ?: continue
             row(tradeList, field(t, "symbol") + " · " + field(t, "side"), field(t, "price"))
+        }
+    }
+
+    private fun performTestnet(path: String, payload: JSONObject? = null) {
+        notice.text = "Sending authenticated Testnet control request…"
+        worker.execute {
+            try {
+                val result = api(path, "POST", payload = payload)
+                val state = api("/api/v1/testnet/trades")
+                ui.post {
+                    val halted = state.optBoolean("emergency_stop", true)
+                    val orderCount = state.optJSONArray("orders")?.length() ?: 0
+                    notice.text = "Testnet state updated · Emergency stop: " +
+                        (if (halted) "ACTIVE" else "released") + " · Orders: " + orderCount +
+                        " · Response: " + result.optString("status", "saved")
+                    notice.setTextColor(if (halted) gold else green)
+                }
+            } catch (e: Exception) {
+                ui.post { notice.text = "Testnet request failed: " + e.message; notice.setTextColor(red) }
+            }
         }
     }
 
