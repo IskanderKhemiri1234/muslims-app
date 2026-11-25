@@ -69,18 +69,26 @@ class TestnetTradeService:
         adapter = self._execution()
         actions: list[dict[str, Any]] = []
         try:
-            # Recover exchange-side state for all known outstanding intents first.
-            for pending in self.journal.pending_orders():
+            # Reconcile every known order, including terminal/canceled orders,
+            # so late fills and commissions are not lost after an app/server restart.
+            for known in self.journal.recent_orders():
                 try:
                     order = adapter.fetch_order_by_client_id(
-                        pending["client_order_id"], pending["symbol"]
+                        known["client_order_id"], known["symbol"]
                     )
-                    self.journal.update_order(pending["client_order_id"], order)
+                    self.journal.update_order(known["client_order_id"], order)
+                    exchange_order_id = str(order.get("id") or known.get("exchange_order_id") or "")
+                    if exchange_order_id:
+                        fills = adapter.fetch_my_trades_for_order(
+                            known["symbol"], exchange_order_id
+                        )
+                        self.journal.record_fills(known["client_order_id"], fills)
                 except ccxt.BaseError as exc:
-                    # Unknown submission state is never blindly resubmitted.
+                    # Missing/temporarily unavailable exchange state remains unresolved.
+                    # Never blindly re-submit an intent with an uncertain outcome.
                     log.warning(
-                        "Could not reconcile Testnet order %s; keeping intent pending: %s",
-                        pending["client_order_id"],
+                        "Could not reconcile Testnet order %s: %s",
+                        known["client_order_id"],
                         type(exc).__name__,
                     )
                     continue
