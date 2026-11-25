@@ -49,11 +49,6 @@ def live_preflight() -> dict[str, Any]:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
-@router.post("/emergency-stop", dependencies=[Depends(__import__("iskander_trade.api", fromlist=["require_dashboard_token"]).require_dashboard_token)])
-def live_emergency_stop() -> dict[str, Any]:
-    service.set_stopped(True)
-    return {"status": "stopped", "emergency_stop": True, "orders_enabled": False}
-
 @router.get("/orders", dependencies=[Depends(_require_dashboard_token)])
 def live_orders_status() -> dict[str, Any]:
     return orders.status()
