@@ -11,7 +11,7 @@ import json
 import sqlite3
 import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
@@ -22,7 +22,7 @@ class JournalError(RuntimeError):
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _positive(value: Any, name: str, *, allow_zero: bool = False) -> str:
@@ -280,10 +280,10 @@ class TradeJournal:
                     "SELECT amount,average_entry,status FROM positions WHERE trade_id=?",
                     (previous["trade_id"],),
                 ).fetchone()
-                current_amount = Decimal(position["amount"]) if position else Decimal("0")
+                current_amount = Decimal(position["amount"]) if position else Decimal(0)
                 if previous["side"] == "buy":
                     total = current_amount + delta
-                    prior_cost = current_amount * Decimal(position["average_entry"]) if position else Decimal("0")
+                    prior_cost = current_amount * Decimal(position["average_entry"]) if position else Decimal(0)
                     weighted = (prior_cost + delta * average) / total
                     db.execute(
                         """INSERT INTO positions(trade_id,symbol,amount,average_entry,status,updated_at)
@@ -294,7 +294,7 @@ class TradeJournal:
                          "open", now),
                     )
                 else:
-                    remaining = max(Decimal("0"), current_amount - delta)
+                    remaining = max(Decimal(0), current_amount - delta)
                     db.execute(
                         """UPDATE positions SET amount=?,status=?,updated_at=? WHERE trade_id=?""",
                         (str(remaining), "closed" if remaining == 0 else "open",
