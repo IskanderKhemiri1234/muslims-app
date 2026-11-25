@@ -183,6 +183,15 @@ class TestnetTradeService:
                 }
 
             state = self.journal.snapshot()
+            if state.get("accounting_issues"):
+                return {
+                    "status": "halted",
+                    "reason": "fill_history_unreconciled",
+                    "accounting_issues": state["accounting_issues"],
+                    "actions": [],
+                    "mode": "binance_spot_testnet",
+                    **state,
+                }
             pending_by_trade: dict[str, list[dict[str, Any]]] = {}
             for item in self.journal.pending_orders():
                 pending_by_trade.setdefault(item["trade_id"], []).append(item)
@@ -258,6 +267,12 @@ class TestnetTradeService:
                         # Intent is durable before the exchange call.
                         order = adapter.create_market_order(symbol, "sell", amount, client_id)
                         self.journal.update_order(client_id, order)
+                        exchange_order_id = str(order.get("id") or "")
+                        if exchange_order_id:
+                            self.journal.record_fills(
+                                client_id,
+                                adapter.fetch_my_trades_for_order(symbol, exchange_order_id),
+                            )
                         actions.append({
                             "trade_id": trade["trade_id"],
                             "action": "stop_loss" if price <= stop else "take_profit",
@@ -272,6 +287,12 @@ class TestnetTradeService:
                         symbol, "buy", trade["quantity"], trade["entry_price"], client_id
                     )
                     self.journal.update_order(client_id, order)
+                    exchange_order_id = str(order.get("id") or "")
+                    if exchange_order_id:
+                        self.journal.record_fills(
+                            client_id,
+                            adapter.fetch_my_trades_for_order(symbol, exchange_order_id),
+                        )
                     actions.append({
                         "trade_id": trade["trade_id"],
                         "action": "entry_limit",
