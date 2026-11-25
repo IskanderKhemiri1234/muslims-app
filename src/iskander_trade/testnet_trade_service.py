@@ -96,9 +96,14 @@ class TestnetTradeService:
                     continue
 
             state = self.journal.snapshot()
-            pending_trades = {item["trade_id"] for item in self.journal.pending_orders()}
+            pending_by_trade: dict[str, list[dict[str, Any]]] = {}
+            for item in self.journal.pending_orders():
+                pending_by_trade.setdefault(item["trade_id"], []).append(item)
             for trade in state["trades"] if not stopped else ():
-                if not trade["enabled"] or trade["trade_id"] in pending_trades:
+                if not trade["enabled"]:
+                    continue
+                pending = pending_by_trade.get(trade["trade_id"], [])
+                if any(item["side"] == "sell" for item in pending):
                     continue
                 symbol = trade["symbol"]
                 price = adapter.fetch_last_price(symbol)
@@ -110,6 +115,29 @@ class TestnetTradeService:
                     stop = Decimal(trade["stop_loss_price"])
                     target = Decimal(trade["take_profit_price"])
                     if price <= stop or price >= target:
+                        # Cancel any unfilled entry remainder before exiting the
+                        # partial position, otherwise a late buy could reopen risk.
+                        for pending_buy in pending:
+                            if pending_buy["side"] == "buy":
+                                canceled = adapter.cancel_order_by_client_id(
+                                    pending_buy["client_order_id"], symbol
+                                )
+                                self.journal.update_order(
+                                    pending_buy["client_order_id"], canceled
+                                )
+                                canceled_id = str(
+                                    canceled.get("id") or pending_buy.get("exchange_order_id") or ""
+                                )
+                                if canceled_id:
+                                    late_fills = adapter.fetch_my_trades_for_order(
+                                        symbol, canceled_id
+                                    )
+                                    self.journal.record_fills(
+                                        pending_buy["client_order_id"], late_fills
+                                    )
+                                    self.journal.mark_fills_synced(
+                                        pending_buy["client_order_id"]
+                                    )
                         # Spot sells are capped by both the journaled position and
                         # Binance's currently free base-asset balance; never short.
                         balances_now = adapter.fetch_balance()
