@@ -65,9 +65,7 @@ class TestnetTradeService:
             self._cycle_lock.release()
 
     def _run_cycle(self) -> dict[str, Any]:
-        if self.journal.emergency_stopped():
-            return {"status": "halted", "reason": "emergency_stop", **self.journal.snapshot()}
-
+        stopped = self.journal.emergency_stopped()
         adapter = self._execution()
         actions: list[dict[str, Any]] = []
         try:
@@ -89,7 +87,7 @@ class TestnetTradeService:
 
             state = self.journal.snapshot()
             pending_trades = {item["trade_id"] for item in self.journal.pending_orders()}
-            for trade in state["trades"]:
+            for trade in state["trades"] if not stopped else ():
                 if not trade["enabled"] or trade["trade_id"] in pending_trades:
                     continue
                 symbol = trade["symbol"]
@@ -145,7 +143,8 @@ class TestnetTradeService:
             self.journal.save_balance_snapshot(normalized_balances)
             snapshot = self.journal.snapshot()
             return {
-                "status": "completed",
+                "status": "halted" if stopped else "completed",
+                "reason": "emergency_stop" if stopped else None,
                 "mode": "binance_spot_testnet",
                 "actions": actions,
                 "balances": snapshot["balances"],
