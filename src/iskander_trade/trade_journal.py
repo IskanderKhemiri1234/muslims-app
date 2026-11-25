@@ -436,6 +436,19 @@ class TradeJournal:
             db.commit()
         return inserted
 
+    def order_fills_complete(self, client_order_id: str) -> bool:
+        with self._connect() as db:
+            order = db.execute(
+                "SELECT filled FROM orders WHERE client_order_id=?", (client_order_id,)
+            ).fetchone()
+            if not order:
+                raise KeyError("order intent not found")
+            rows = db.execute(
+                "SELECT amount FROM fills WHERE client_order_id=?", (client_order_id,)
+            ).fetchall()
+            total = sum((Decimal(row["amount"]) for row in rows), Decimal(0))
+            return total == Decimal(order["filled"])
+
     def mark_fills_synced(self, client_order_id: str) -> None:
         with self._lock, self._connect() as db:
             db.execute(
@@ -443,14 +456,14 @@ class TradeJournal:
                 (_now(), client_order_id),
             )
 
-    def recent_orders(self, limit: int = 200) -> list[dict[str, Any]]:
+    def recent_orders(self, limit: int | None = None) -> list[dict[str, Any]]:
+        """Return every unresolved order; never truncate reconciliation by a page cap."""
         with self._connect() as db:
             return [dict(row) for row in db.execute(
                 """SELECT * FROM orders
                    WHERE status IN ('intent','open','partially_filled')
                       OR fills_synced=0
-                   ORDER BY created_at DESC LIMIT ?""",
-                (max(1, min(limit, 1000)),),
+                   ORDER BY created_at ASC"""
             ).fetchall()]
 
     def save_balance_snapshot(self, balances: dict[str, Any]) -> None:
