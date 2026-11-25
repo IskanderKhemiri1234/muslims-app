@@ -78,7 +78,7 @@ def test_partial_buy_then_stop_loss_sell_survives_service_restart(tmp_path, monk
     assert first["actions"][0]["action"] == "entry_limit"
     assert first["positions"][0]["amount"] == "0.004"
 
-    restarted = TestnetTradeService(tmp_path / "testnet.sqlite3")
+    restarted = TradeService(tmp_path / "testnet.sqlite3")
     adapter.price = Decimal("57900")
     second = restarted.cycle()
     assert second["actions"][0]["action"] == "stop_loss"
@@ -94,5 +94,5 @@ def test_partial_buy_then_take_profit_sell(tmp_path, monkeypatch):
     adapter.price = Decimal("65100")
     result = service.cycle()
     assert result["actions"][0]["action"] == "take_profit"
-    assert result["positions"][0]["amount"] == "0"
+    assert Decimal(result["positions"][0]["amount"]) == 0
     assert result["realizations"]
