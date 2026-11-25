@@ -11,8 +11,8 @@ def test_buy_base_fee_reduces_inventory_without_losing_quote_cost():
         "fee_cost": "0.00001", "fee_currency": "BTC", "timestamp": "1",
     }])
     assert ledger.base_quantity == Decimal("0.00999")
-    assert ledger.quote_cost == Decimal("600")
-    assert ledger.average_entry == Decimal("600") / Decimal("0.00999")
+    assert ledger.quote_cost == Decimal(600)
+    assert ledger.average_entry == Decimal(600) / Decimal("0.00999")
 
 
 def test_buy_quote_fee_is_added_to_cost_basis():
@@ -32,7 +32,7 @@ def test_sell_base_fee_is_included_in_inventory_consumption():
          "fee_cost": "0.00001", "fee_currency": "BTC", "timestamp": "2"},
     ])
     assert ledger.base_quantity == Decimal("0.00499")
-    assert ledger.realized_quote_pnl == Decimal("325") - Decimal("300.6")
+    assert ledger.realized_quote_pnl == Decimal(325) - Decimal("300.6")
 
 
 def test_sell_quote_fee_reduces_realized_proceeds():
@@ -52,7 +52,7 @@ def test_third_asset_fee_is_reported_without_fake_fx_conversion():
         "fee_cost": "0.02", "fee_currency": "BNB", "timestamp": "1",
     }])
     assert ledger.base_quantity == Decimal("0.01")
-    assert ledger.quote_cost == Decimal("600")
+    assert ledger.quote_cost == Decimal(600)
     assert ledger.fees_by_asset == {"BNB": Decimal("0.02")}
 
 
@@ -60,7 +60,7 @@ def test_duplicate_exchange_fill_is_not_double_counted():
     fill = {"id": "same", "side": "buy", "amount": "1", "price": "10",
             "fee_cost": "0", "fee_currency": "", "timestamp": "1"}
     ledger = replay_spot_fills("ABC/USDT", [fill, fill])
-    assert ledger.base_quantity == Decimal("1")
+    assert ledger.base_quantity == Decimal(1)
 
 
 def test_sell_cannot_make_spot_inventory_negative():
