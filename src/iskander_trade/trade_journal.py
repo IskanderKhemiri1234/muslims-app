@@ -105,6 +105,16 @@ class TradeJournal:
                     status TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS trade_realizations (
+                    realization_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    trade_id TEXT NOT NULL REFERENCES trade_configs(trade_id),
+                    client_order_id TEXT NOT NULL REFERENCES orders(client_order_id),
+                    amount TEXT NOT NULL,
+                    average_entry TEXT NOT NULL,
+                    exit_price TEXT NOT NULL,
+                    gross_pnl TEXT NOT NULL,
+                    occurred_at TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS system_flags (
                     flag TEXT PRIMARY KEY,
                     value TEXT NOT NULL,
@@ -307,7 +317,19 @@ class TradeJournal:
                          "open", now),
                     )
                 else:
-                    remaining = max(Decimal(0), current_amount - delta)
+                    if not position or current_amount <= 0 or delta > current_amount:
+                        db.rollback()
+                        raise JournalError("Sell fill exceeds the journaled Spot position.")
+                    entry = Decimal(position["average_entry"])
+                    gross_pnl = delta * (incremental_price - entry)
+                    db.execute(
+                        """INSERT INTO trade_realizations
+                           (trade_id,client_order_id,amount,average_entry,exit_price,gross_pnl,occurred_at)
+                           VALUES(?,?,?,?,?,?,?)""",
+                        (previous["trade_id"], client_order_id, str(delta), str(entry),
+                         str(incremental_price), str(gross_pnl), now),
+                    )
+                    remaining = current_amount - delta
                     db.execute(
                         """UPDATE positions SET amount=?,status=?,updated_at=? WHERE trade_id=?""",
                         (str(remaining), "closed" if remaining == 0 else "open",
@@ -429,6 +451,9 @@ class TradeJournal:
                 )],
                 "fills": [dict(r) for r in db.execute(
                     "SELECT * FROM fills ORDER BY occurred_at DESC LIMIT 500"
+                )],
+                "realizations": [dict(r) for r in db.execute(
+                    "SELECT * FROM trade_realizations ORDER BY occurred_at DESC LIMIT 500"
                 )],
                 "positions": [dict(r) for r in db.execute("SELECT * FROM positions")],
                 "emergency_stop": self.emergency_stopped(),
