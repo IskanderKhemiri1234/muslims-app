@@ -5,12 +5,12 @@ import hashlib
 import os
 import sqlite3
 import threading
-
-import ccxt
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
+
+import ccxt
 
 from .live_control import LiveControlService
 from .live_execution import BinanceSpotExecution, ExecutionDisabled
