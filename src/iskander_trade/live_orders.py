@@ -160,6 +160,24 @@ class LiveManualOrderService:
         if quote <= 0:
             raise LiveOrderError("Order notional must be positive.")
 
+
+    def _sync_balances(self, adapter: BinanceSpotExecution) -> None:
+        balances = adapter.fetch_balance()
+        with self._connect() as db:
+            for asset, values in balances.items():
+                if not isinstance(values, dict):
+                    continue
+                if not any(values.get(key) is not None for key in ("free", "used", "total")):
+                    continue
+                db.execute(
+                    """INSERT INTO live_balances(asset,free,used,total,observed_at)
+                       VALUES(?,?,?,?,?) ON CONFLICT(asset) DO UPDATE SET
+                       free=excluded.free,used=excluded.used,total=excluded.total,
+                       observed_at=excluded.observed_at""",
+                    (asset, str(values.get("free") or "0"), str(values.get("used") or "0"),
+                     str(values.get("total") or "0"), datetime.now(UTC).isoformat()),
+                )
+
     def submit(self, *, request_id: str, symbol: str, side: str, order_type: str,
                amount: str, price: str | None = None) -> dict[str, Any]:
         request_id = request_id.strip()
@@ -216,21 +234,7 @@ class LiveManualOrderService:
                 order = adapter.create_market_order(normalized, side, qty, client_id)
             self._save_order(client_id, order)
             self._sync_fills(adapter, client_id, normalized, order)
-            balances = adapter.fetch_balance()
-            with self._connect() as db:
-                for asset, values in balances.items():
-                    if not isinstance(values, dict):
-                        continue
-                    if not any(values.get(key) is not None for key in ("free", "used", "total")):
-                        continue
-                    db.execute(
-                        """INSERT INTO live_balances(asset,free,used,total,observed_at)
-                           VALUES(?,?,?,?,?) ON CONFLICT(asset) DO UPDATE SET
-                           free=excluded.free,used=excluded.used,total=excluded.total,
-                           observed_at=excluded.observed_at""",
-                        (asset, str(values.get("free") or "0"), str(values.get("used") or "0"),
-                         str(values.get("total") or "0"), datetime.now(UTC).isoformat()),
-                    )
+            self._sync_balances(adapter)
             return self.status()
         finally:
             adapter.close()
@@ -363,6 +367,7 @@ class LiveManualOrderService:
                             "UPDATE live_orders SET status='unknown',updated_at=? WHERE client_order_id=?",
                             (datetime.now(UTC).isoformat(), row["client_order_id"]),
                         )
+            self._sync_balances(adapter)
             return self.status()
         finally:
             adapter.close()
