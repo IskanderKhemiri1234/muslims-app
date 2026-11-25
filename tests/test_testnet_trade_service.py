@@ -14,6 +14,12 @@ class FakeTestnetAdapter:
     def fetch_order_by_client_id(self, client_order_id, symbol):
         return self.orders[client_order_id]
 
+    def cancel_order_by_client_id(self, client_order_id, symbol):
+        current = dict(self.orders[client_order_id])
+        current["status"] = "canceled"
+        self.orders[client_order_id] = current
+        return current
+
     def fetch_my_trades_for_order(self, symbol, exchange_order_id):
         return [{
             "id": "fill-" + exchange_order_id,
