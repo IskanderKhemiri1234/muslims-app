@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 from .config import Settings
 from .engine import PaperTradingEngine
 from .live_execution import ExecutionDisabled
+from .live_api import router as live_router
 from .market_data import BinanceMarketData
 from .paper_ledger import PaperLedger
 from .state import load_state
@@ -340,6 +341,4 @@ def evaluate_ml() -> dict[str, Any]:
         _close_client(client)
 
 
-# Live safety endpoints are read-only until the full order manager passes review.
-from .live_api import router as live_router
 app.include_router(live_router)
