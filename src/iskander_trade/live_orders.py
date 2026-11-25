@@ -5,14 +5,15 @@ import hashlib
 import os
 import sqlite3
 import threading
-import uuid
+
+import ccxt
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from .live_execution import BinanceSpotExecution, ExecutionDisabled, OrderValidationError
 from .live_control import LiveControlService
+from .live_execution import BinanceSpotExecution, ExecutionDisabled
 
 
 class LiveOrderError(RuntimeError):
@@ -303,7 +304,7 @@ class LiveManualOrderService:
                     order = adapter.fetch_order_by_client_id(row["client_order_id"], row["symbol"])
                     self._save_order(row["client_order_id"], order)
                     self._sync_fills(adapter, row["client_order_id"], row["symbol"], order)
-                except Exception:
+                except (ccxt.BaseError, LiveOrderError, ValueError, sqlite3.Error, KeyError):
                     # An uncertain order stays unresolved and is never resubmitted.
                     with self._connect() as db:
                         db.execute(
