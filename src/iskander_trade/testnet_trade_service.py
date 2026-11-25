@@ -289,6 +289,18 @@ class TestnetTradeService:
                             "client_order_id": client_id,
                         })
                 elif not any(item["side"] == "buy" for item in pending) and price <= Decimal(trade["entry_price"]):
+                    balances_now = adapter.fetch_balance()
+                    quote_asset = symbol.split("/", maxsplit=1)[1]
+                    quote_balance = balances_now.get(quote_asset) or {}
+                    free_quote = Decimal(str(quote_balance.get("free") or "0"))
+                    required_quote = Decimal(trade["quantity"]) * Decimal(trade["entry_price"])
+                    if free_quote < required_quote:
+                        log.warning(
+                            "Entry skipped for %s: insufficient free %s balance.",
+                            symbol,
+                            quote_asset,
+                        )
+                        continue
                     client_id = self.journal.create_order_intent(
                         trade_id=trade["trade_id"], symbol=symbol, side="buy",
                         amount=trade["quantity"], price=trade["entry_price"],
