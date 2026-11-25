@@ -83,7 +83,8 @@ class TradeJournal:
                     status TEXT NOT NULL,
                     raw_json TEXT NOT NULL DEFAULT '{}',
                     created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
+                    updated_at TEXT NOT NULL,
+                    fills_synced INTEGER NOT NULL DEFAULT 0
                 );
                 CREATE INDEX IF NOT EXISTS orders_trade_idx ON orders(trade_id, created_at);
                 CREATE TABLE IF NOT EXISTS fills (
@@ -124,6 +125,13 @@ class TradeJournal:
                     occurred_at TEXT NOT NULL
                 );
             """)
+            order_columns = {
+                row["name"] for row in db.execute("PRAGMA table_info(orders)").fetchall()
+            }
+            if "fills_synced" not in order_columns:
+                db.execute(
+                    "ALTER TABLE orders ADD COLUMN fills_synced INTEGER NOT NULL DEFAULT 0"
+                )
             db.execute(
                 "INSERT OR IGNORE INTO system_flags(flag,value,updated_at) VALUES('emergency_stop','1',?)",
                 (_now(),),
@@ -362,10 +370,20 @@ class TradeJournal:
             db.commit()
         return inserted
 
+    def mark_fills_synced(self, client_order_id: str) -> None:
+        with self._lock, self._connect() as db:
+            db.execute(
+                "UPDATE orders SET fills_synced=1,updated_at=? WHERE client_order_id=?",
+                (_now(), client_order_id),
+            )
+
     def recent_orders(self, limit: int = 200) -> list[dict[str, Any]]:
         with self._connect() as db:
             return [dict(row) for row in db.execute(
-                "SELECT * FROM orders ORDER BY created_at DESC LIMIT ?",
+                """SELECT * FROM orders
+                   WHERE status IN ('intent','open','partially_filled')
+                      OR fills_synced=0
+                   ORDER BY created_at DESC LIMIT ?""",
                 (max(1, min(limit, 1000)),),
             ).fetchall()]
 
