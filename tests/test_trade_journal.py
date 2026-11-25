@@ -197,7 +197,7 @@ def test_sell_fill_records_gross_realized_pnl_and_closes_position(tmp_path):
     })
     snapshot = journal.snapshot()
     assert Decimal(snapshot["positions"][0]["amount"]) == 0
-    assert Decimal(snapshot["realizations"][0]["gross_pnl"]) == Decimal("50")
+    assert Decimal(snapshot["realizations"][0]["gross_pnl"]) == Decimal(50)
 
 
 def test_sell_fill_cannot_create_short_spot_position(tmp_path):
