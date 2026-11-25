@@ -193,7 +193,7 @@ def test_sell_fill_records_gross_realized_pnl_and_closes_position(tmp_path):
         "average": "65000", "status": "closed",
     })
     snapshot = journal.snapshot()
-    assert snapshot["positions"][0]["amount"] == "0"
+    assert Decimal(snapshot["positions"][0]["amount"]) == 0
     assert Decimal(snapshot["realizations"][0]["gross_pnl"]) == Decimal("50")
 
 
