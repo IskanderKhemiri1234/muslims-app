@@ -25,11 +25,21 @@ class FakeTestnetAdapter:
         return current
 
     def fetch_my_trades_for_order(self, symbol, exchange_order_id):
+        order = next(
+            (item for item in self.orders.values() if item.get("id") == exchange_order_id),
+            None,
+        )
+        if not order or Decimal(str(order.get("filled") or "0")) <= 0:
+            return []
+        is_buy = order.get("side") == "buy"
         return [{
             "id": "fill-" + exchange_order_id,
-            "amount": "0.004",
-            "price": "60000",
-            "fee": {"cost": "0.000004", "currency": "BTC"},
+            "amount": str(order["filled"]),
+            "price": str(order.get("average") or "60000"),
+            "fee": {
+                "cost": "0.000004" if is_buy else "0",
+                "currency": "BTC" if is_buy else None,
+            },
         }]
 
     def fetch_last_price(self, symbol):
@@ -38,7 +48,7 @@ class FakeTestnetAdapter:
     def create_limit_order(self, symbol, side, amount, price, client_order_id):
         self.market_sides.append(side)
         order = {
-            "id": "buy-order", "filled": "0.004", "remaining": "0.006",
+            "id": "buy-order", "side": side, "filled": "0.004", "remaining": "0.006",
             "average": "60000", "status": "open",
         }
         self.orders[client_order_id] = order
@@ -47,7 +57,7 @@ class FakeTestnetAdapter:
     def create_market_order(self, symbol, side, amount, client_order_id):
         self.market_sides.append(side)
         order = {
-            "id": "sell-order", "filled": str(amount), "remaining": "0",
+            "id": "sell-order", "side": side, "filled": str(amount), "remaining": "0",
             "average": str(self.price), "status": "closed",
         }
         self.orders[client_order_id] = order
@@ -84,7 +94,7 @@ def test_partial_buy_then_stop_loss_sell_survives_service_restart(tmp_path, monk
     service, _trade, adapter = _armed_service(tmp_path, monkeypatch, "60000")
     first = service.cycle()
     assert first["actions"][0]["action"] == "entry_limit"
-    assert first["positions"][0]["amount"] == "0.004"
+    assert first["positions"][0]["amount"] == "0.003996"
 
     restarted = TradeService(tmp_path / "testnet.sqlite3")
     adapter.price = Decimal(57900)
