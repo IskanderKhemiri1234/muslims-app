@@ -1,4 +1,4 @@
-"""Paper-only FastAPI dashboard API with an optional continuous worker."""
+"""FastAPI dashboard API with isolated Paper, Testnet and manual Live controls."""
 from __future__ import annotations
 
 import hmac
@@ -19,8 +19,8 @@ from pydantic import BaseModel, Field
 
 from .config import Settings
 from .engine import PaperTradingEngine
-from .live_execution import ExecutionDisabled
 from .live_api import router as live_router
+from .live_execution import ExecutionDisabled
 from .market_data import BinanceMarketData
 from .paper_ledger import PaperLedger
 from .state import load_state
