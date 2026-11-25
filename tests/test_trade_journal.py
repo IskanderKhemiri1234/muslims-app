@@ -98,7 +98,7 @@ def test_additional_fill_only_applies_the_new_cumulative_delta(tmp_path):
     })
     position = journal.snapshot()["positions"][0]
     assert position["amount"] == "0.08"
-    assert Decimal(position["average_entry"]) == Decimal("3010")
+    assert Decimal(position["average_entry"]) == Decimal(3010)
 
 
 def test_exchange_fills_and_fees_are_persisted_idempotently(tmp_path):
