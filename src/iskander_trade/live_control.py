@@ -88,8 +88,6 @@ class LiveControlService:
         status = self.status()
         if not status["configured"]:
             raise LiveControlError("Live preflight refused: server-side Live configuration is not enabled.")
-        if status["emergency_stop"]:
-            raise LiveControlError("Live preflight refused: persistent emergency stop is active.")
         adapter = BinanceSpotExecution()
         try:
             if adapter.settings.testnet or not adapter.settings.live_enabled:
