@@ -13,22 +13,33 @@ class FakeTestnetAdapter:
         self.orders = {}
         self.closed = False
         self.market_sides = []
+        self.cancel_status = "canceled"
 
     def fetch_order_by_client_id(self, client_order_id, symbol):
         return self.orders[client_order_id]
 
     def cancel_order_by_client_id(self, client_order_id, symbol):
         current = dict(self.orders[client_order_id])
-        current["status"] = "canceled"
+        current["status"] = self.cancel_status
         self.orders[client_order_id] = current
         return current
 
     def fetch_my_trades_for_order(self, symbol, exchange_order_id):
+        order = next(
+            (item for item in self.orders.values() if item.get("id") == exchange_order_id),
+            None,
+        )
+        if not order or Decimal(str(order.get("filled") or "0")) <= 0:
+            return []
+        is_buy = order.get("side") == "buy"
         return [{
             "id": "fill-" + exchange_order_id,
-            "amount": "0.004",
-            "price": "60000",
-            "fee": {"cost": "0.000004", "currency": "BTC"},
+            "amount": str(order["filled"]),
+            "price": str(order.get("average") or "60000"),
+            "fee": {
+                "cost": "0.000004" if is_buy else "0",
+                "currency": "BTC" if is_buy else None,
+            },
         }]
 
     def fetch_last_price(self, symbol):
@@ -37,7 +48,7 @@ class FakeTestnetAdapter:
     def create_limit_order(self, symbol, side, amount, price, client_order_id):
         self.market_sides.append(side)
         order = {
-            "id": "buy-order", "filled": "0.004", "remaining": "0.006",
+            "id": "buy-order", "side": side, "filled": "0.004", "remaining": "0.006",
             "average": "60000", "status": "open",
         }
         self.orders[client_order_id] = order
@@ -46,11 +57,15 @@ class FakeTestnetAdapter:
     def create_market_order(self, symbol, side, amount, client_order_id):
         self.market_sides.append(side)
         order = {
-            "id": "sell-order", "filled": str(amount), "remaining": "0",
+            "id": "sell-order", "side": side, "filled": str(amount), "remaining": "0",
             "average": str(self.price), "status": "closed",
         }
         self.orders[client_order_id] = order
         return order
+
+    def fetch_open_orders(self, symbol):
+        return [dict(order, clientOrderId=client_id) for client_id, order in self.orders.items()
+                if order.get("status") in {"open", "partially_filled"}]
 
     def fetch_balance(self):
         return {
@@ -79,7 +94,7 @@ def test_partial_buy_then_stop_loss_sell_survives_service_restart(tmp_path, monk
     service, _trade, adapter = _armed_service(tmp_path, monkeypatch, "60000")
     first = service.cycle()
     assert first["actions"][0]["action"] == "entry_limit"
-    assert first["positions"][0]["amount"] == "0.004"
+    assert first["positions"][0]["amount"] == "0.003996"
 
     restarted = TradeService(tmp_path / "testnet.sqlite3")
     adapter.price = Decimal(57900)
@@ -145,3 +160,51 @@ def test_pending_unfilled_buy_is_not_duplicated_on_next_cycle(tmp_path, monkeypa
     assert adapter.market_sides == ["buy"]
     assert len(second["orders"]) == 1
 
+
+
+def test_unconfirmed_entry_cancel_blocks_stop_loss_sell(tmp_path, monkeypatch):
+    service, _trade, adapter = _armed_service(tmp_path, monkeypatch, "60000")
+    service.cycle()
+    adapter.price = Decimal(57900)
+    adapter.cancel_status = "open"
+
+    restarted = TradeService(tmp_path / "testnet.sqlite3")
+    try:
+        restarted.cycle()
+    except RuntimeError as exc:
+        assert "cancellation is unconfirmed" in str(exc)
+    else:
+        raise AssertionError("Unconfirmed cancel must block exit order")
+
+    assert adapter.market_sides == ["buy"]
+
+
+def test_unknown_exchange_open_order_halts_cycle_without_auto_cancel(tmp_path, monkeypatch):
+    service, _trade, adapter = _armed_service(tmp_path, monkeypatch, "60000")
+    adapter.orders["external-manual-order"] = {
+        "id": "external-1", "filled": "0", "remaining": "0.01",
+        "average": None, "status": "open",
+    }
+
+    result = service.cycle()
+
+    assert result["status"] == "halted"
+    assert result["reason"] == "unknown_exchange_open_orders"
+    assert result["actions"] == []
+    assert result["unknown_open_orders"][0]["client_order_id"] == "external-manual-order"
+    assert adapter.market_sides == []
+    assert adapter.orders["external-manual-order"]["status"] == "open"
+
+
+def test_insufficient_free_quote_balance_skips_buy(tmp_path, monkeypatch):
+    service, _trade, adapter = _armed_service(tmp_path, monkeypatch, "59000")
+    adapter.fetch_balance = lambda: {
+        "BTC": {"free": "0", "used": "0", "total": "0"},
+        "USDT": {"free": "1", "used": "0", "total": "1"},
+    }
+
+    result = service.cycle()
+
+    assert result["actions"] == []
+    assert adapter.market_sides == []
+    assert result["status"] == "completed"

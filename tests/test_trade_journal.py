@@ -230,3 +230,41 @@ def test_monitor_cycle_lease_is_shared_across_journal_instances(tmp_path):
     first.release_cycle_lease("process-one")
     assert second.acquire_cycle_lease("process-two") is True
     second.release_cycle_lease("process-two")
+
+
+def test_cycle_lease_can_be_renewed_and_excludes_other_owner(tmp_path):
+    journal = TradeJournal(tmp_path / "journal.sqlite3")
+    assert journal.acquire_cycle_lease("owner-a", ttl_seconds=60) is True
+    assert journal.renew_cycle_lease("owner-a", ttl_seconds=60) is True
+    assert journal.acquire_cycle_lease("owner-b", ttl_seconds=60) is False
+    journal.release_cycle_lease("owner-a")
+    assert journal.acquire_cycle_lease("owner-b", ttl_seconds=60) is True
+
+
+def test_exchange_base_balance_below_net_fill_inventory_is_reported(tmp_path):
+    journal = TradeJournal(tmp_path / "journal.sqlite3")
+    trade = journal.create_trade(
+        symbol="BTC/USDT", quantity="0.001", entry_price="60000",
+        stop_loss_price="58000", take_profit_price="65000",
+    )
+    client_id = journal.create_order_intent(
+        trade_id=trade["trade_id"], symbol="BTC/USDT", side="buy",
+        amount="0.001", price="60000",
+    )
+    journal.update_order(client_id, {
+        "id": "buy-1", "filled": "0.001", "remaining": "0",
+        "average": "60000", "status": "closed",
+    })
+    journal.record_fills(client_id, [{
+        "id": "fill-1", "amount": "0.001", "price": "60000",
+        "fee": {"cost": "0.00001", "currency": "BTC"},
+    }])
+    journal.save_balance_snapshot({
+        "BTC": {"free": "0.00098", "used": "0", "total": "0.00098"},
+        "USDT": {"free": "100", "used": "0", "total": "100"},
+    })
+
+    snapshot = journal.snapshot()
+
+    assert snapshot["positions"][0]["amount"] == "0.00099"
+    assert snapshot["balance_issues"]

@@ -27,6 +27,7 @@ class TestnetTradeService:
             journal_path or os.getenv("TRADE_JOURNAL_PATH", "data/trades.sqlite3")
         )
         self._cycle_lock = threading.Lock()
+        self._lease_lost = threading.Event()
 
     @staticmethod
     def _execution() -> BinanceSpotExecution:
@@ -94,17 +95,40 @@ class TestnetTradeService:
             raise RuntimeError("A Testnet monitor cycle is already running.")
         owner_id = uuid.uuid4().hex
         lease_acquired = False
+        lease_stop = threading.Event()
+        heartbeat: threading.Thread | None = None
         try:
             lease_acquired = self.journal.acquire_cycle_lease(owner_id)
             if not lease_acquired:
                 raise RuntimeError(
                     "Another Testnet monitor process owns the durable cycle lease."
                 )
+
+            self._lease_lost.clear()
+
+            def renew_lease() -> None:
+                while not lease_stop.wait(30):
+                    if not self.journal.renew_cycle_lease(owner_id, ttl_seconds=300):
+                        self._lease_lost.set()
+                        log.error("Testnet cycle lease was lost; new orders are blocked.")
+                        return
+
+            heartbeat = threading.Thread(
+                target=renew_lease, name="iskander-testnet-lease-heartbeat", daemon=True
+            )
+            heartbeat.start()
             return self._run_cycle()
         finally:
+            lease_stop.set()
+            if heartbeat is not None:
+                heartbeat.join(timeout=2)
             if lease_acquired:
                 self.journal.release_cycle_lease(owner_id)
             self._cycle_lock.release()
+
+    def _assert_lease(self) -> None:
+        if self._lease_lost.is_set():
+            raise RuntimeError("Durable Testnet cycle lease was lost; order submission is blocked.")
 
     def _run_cycle(self) -> dict[str, Any]:
         stopped = self.journal.emergency_stopped()
@@ -125,7 +149,10 @@ class TestnetTradeService:
                             known["symbol"], exchange_order_id
                         )
                         self.journal.record_fills(known["client_order_id"], fills)
-                        if order.get("status") in {"closed", "canceled", "rejected", "expired"}:
+                        if (
+                            order.get("status") in {"closed", "canceled", "rejected", "expired"}
+                            and self.journal.order_fills_complete(known["client_order_id"])
+                        ):
                             self.journal.mark_fills_synced(known["client_order_id"])
                 except ccxt.BaseError as exc:
                     # Missing/temporarily unavailable exchange state remains unresolved.
@@ -137,7 +164,62 @@ class TestnetTradeService:
                     )
                     continue
 
+            # Compare every configured market's exchange-open orders with our durable
+            # intents. Unknown orders are never canceled automatically; they freeze
+            # this cycle so an external/manual order cannot be mistaken for free funds.
+            known_ids = {item["client_order_id"] for item in self.journal.recent_orders()}
+            unknown_open_orders: list[dict[str, str]] = []
+            for symbol in sorted(adapter.settings.allowed_symbols):
+                for exchange_order in adapter.fetch_open_orders(symbol):
+                    info = exchange_order.get("info") if isinstance(exchange_order.get("info"), dict) else {}
+                    client_id = str(
+                        exchange_order.get("clientOrderId")
+                        or info.get("clientOrderId")
+                        or info.get("origClientOrderId")
+                        or ""
+                    )
+                    if client_id not in known_ids:
+                        unknown_open_orders.append({
+                            "symbol": symbol,
+                            "exchange_order_id": str(exchange_order.get("id") or ""),
+                            "client_order_id": client_id,
+                            "status": str(exchange_order.get("status") or "open"),
+                        })
+            if unknown_open_orders:
+                balances = adapter.fetch_balance()
+                normalized = {
+                    key: {
+                        "free": str(value.get("free", 0)),
+                        "used": str(value.get("used", 0)),
+                        "total": str(value.get("total", 0)),
+                    }
+                    for key, value in balances.items()
+                    if isinstance(value, dict) and any(
+                        value.get(field) is not None for field in ("free", "used", "total")
+                    )
+                }
+                self.journal.save_balance_snapshot(normalized)
+                snapshot = self.journal.snapshot()
+                return {
+                    "status": "halted",
+                    "reason": "unknown_exchange_open_orders",
+                    "unknown_open_orders": unknown_open_orders,
+                    "actions": [],
+                    "mode": "binance_spot_testnet",
+                    **snapshot,
+                }
+
             state = self.journal.snapshot()
+            if state.get("accounting_issues") or state.get("balance_issues"):
+                return {
+                    "status": "halted",
+                    "reason": "fill_or_balance_reconciliation_failed",
+                    "accounting_issues": state.get("accounting_issues", []),
+                    "balance_issues": state.get("balance_issues", []),
+                    "actions": [],
+                    "mode": "binance_spot_testnet",
+                    **state,
+                }
             pending_by_trade: dict[str, list[dict[str, Any]]] = {}
             for item in self.journal.pending_orders():
                 pending_by_trade.setdefault(item["trade_id"], []).append(item)
@@ -161,9 +243,21 @@ class TestnetTradeService:
                         # partial position, otherwise a late buy could reopen risk.
                         for pending_buy in pending:
                             if pending_buy["side"] == "buy":
-                                canceled = adapter.cancel_order_by_client_id(
+                                adapter.cancel_order_by_client_id(
                                     pending_buy["client_order_id"], symbol
                                 )
+                                # A cancel acknowledgement alone is not enough: fetch
+                                # final state again to include fills racing with cancel.
+                                canceled = adapter.fetch_order_by_client_id(
+                                    pending_buy["client_order_id"], symbol
+                                )
+                                if canceled.get("status") not in {
+                                    "canceled", "closed", "rejected", "expired"
+                                }:
+                                    raise RuntimeError(
+                                        "Entry cancellation is unconfirmed; exit is blocked "
+                                        "until Binance reports a terminal order state."
+                                    )
                                 self.journal.update_order(
                                     pending_buy["client_order_id"], canceled
                                 )
@@ -177,6 +271,13 @@ class TestnetTradeService:
                                     self.journal.record_fills(
                                         pending_buy["client_order_id"], late_fills
                                     )
+                                    if not self.journal.order_fills_complete(
+                                        pending_buy["client_order_id"]
+                                    ):
+                                        raise RuntimeError(
+                                            "Final fill history is incomplete after cancel; "
+                                            "exit is blocked until reconciliation completes."
+                                        )
                                     self.journal.mark_fills_synced(
                                         pending_buy["client_order_id"]
                                     )
@@ -194,27 +295,55 @@ class TestnetTradeService:
                                 base_asset,
                             )
                             continue
+                        self._assert_lease()
                         client_id = self.journal.create_order_intent(
                             trade_id=trade["trade_id"], symbol=symbol, side="sell",
                             amount=amount, price=None, order_type="market",
                         )
                         # Intent is durable before the exchange call.
+                        self._assert_lease()
                         order = adapter.create_market_order(symbol, "sell", amount, client_id)
                         self.journal.update_order(client_id, order)
+                        exchange_order_id = str(order.get("id") or "")
+                        if exchange_order_id:
+                            self.journal.record_fills(
+                                client_id,
+                                adapter.fetch_my_trades_for_order(symbol, exchange_order_id),
+                            )
                         actions.append({
                             "trade_id": trade["trade_id"],
                             "action": "stop_loss" if price <= stop else "take_profit",
                             "client_order_id": client_id,
                         })
                 elif not any(item["side"] == "buy" for item in pending) and price <= Decimal(trade["entry_price"]):
+                    balances_now = adapter.fetch_balance()
+                    quote_asset = symbol.split("/", maxsplit=1)[1]
+                    quote_balance = balances_now.get(quote_asset) or {}
+                    free_quote = Decimal(str(quote_balance.get("free") or "0"))
+                    required_quote = Decimal(trade["quantity"]) * Decimal(trade["entry_price"])
+                    if free_quote < required_quote:
+                        log.warning(
+                            "Entry skipped for %s: insufficient free %s balance.",
+                            symbol,
+                            quote_asset,
+                        )
+                        continue
+                    self._assert_lease()
                     client_id = self.journal.create_order_intent(
                         trade_id=trade["trade_id"], symbol=symbol, side="buy",
                         amount=trade["quantity"], price=trade["entry_price"],
                     )
+                    self._assert_lease()
                     order = adapter.create_limit_order(
                         symbol, "buy", trade["quantity"], trade["entry_price"], client_id
                     )
                     self.journal.update_order(client_id, order)
+                    exchange_order_id = str(order.get("id") or "")
+                    if exchange_order_id:
+                        self.journal.record_fills(
+                            client_id,
+                            adapter.fetch_my_trades_for_order(symbol, exchange_order_id),
+                        )
                     actions.append({
                         "trade_id": trade["trade_id"],
                         "action": "entry_limit",

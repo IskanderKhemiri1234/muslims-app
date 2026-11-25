@@ -67,10 +67,14 @@ class BinanceSpotExecution:
         self.settings = settings or ExecutionSettings.from_env()
         if not self.settings.api_key or not self.settings.api_secret:
             raise ExecutionDisabled("Binance API credentials are not configured on the server.")
-        if not self.settings.testnet and not self.settings.live_enabled:
-            raise ExecutionDisabled("Live trading is disabled. Testnet is required.")
-        if self.settings.testnet and self.settings.live_enabled:
-            raise ExecutionDisabled("Conflicting flags: disable live trading while using Testnet.")
+        if not self.settings.testnet:
+            raise ExecutionDisabled(
+                "Production Live execution is not available in this Testnet release."
+            )
+        if self.settings.live_enabled:
+            raise ExecutionDisabled(
+                "Conflicting flags: ENABLE_LIVE_TRADING must remain false in Testnet."
+            )
 
         self.exchange = ccxt.binance({
             "apiKey": self.settings.api_key,
@@ -157,8 +161,11 @@ class BinanceSpotExecution:
             raise OrderValidationError("Market order exceeds MAX_ORDER_QUOTE_USDT.")
         limits = market.get("limits") or {}
         minimum = (limits.get("amount") or {}).get("min")
+        minimum_cost = (limits.get("cost") or {}).get("min")
         if minimum is not None and formatted < Decimal(str(minimum)):
             raise OrderValidationError("Order amount is below Binance minimum.")
+        if minimum_cost is not None and formatted * Decimal(str(reference_price)) < Decimal(str(minimum_cost)):
+            raise OrderValidationError("Market order notional is below Binance minimum.")
         return self.exchange.create_order(
             normalized, "market", side, float(formatted), None,
             {"newClientOrderId": client_order_id},
@@ -192,6 +199,12 @@ class BinanceSpotExecution:
         return self.exchange.fetch_my_trades(
             normalized, since, 1000, {"orderId": exchange_order_id}
         )
+
+    def fetch_open_orders(self, symbol: str) -> list[dict[str, Any]]:
+        normalized = symbol.strip().upper()
+        if normalized not in self.settings.allowed_symbols:
+            raise OrderValidationError("Symbol is not in BINANCE_ALLOWED_SYMBOLS.")
+        return self.exchange.fetch_open_orders(normalized)
 
     def fetch_balance(self) -> dict[str, Any]:
         return self.exchange.fetch_balance()

@@ -16,6 +16,8 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
+from .fill_accounting import AccountingError, replay_spot_fills
+
 
 class JournalError(RuntimeError):
     pass
@@ -172,6 +174,23 @@ class TradeJournal:
             acquired = cursor.rowcount == 1
             db.commit()
             return acquired
+
+    def renew_cycle_lease(
+        self, owner_id: str, *, lease_key: str = "binance_testnet_monitor",
+        ttl_seconds: int = 300,
+    ) -> bool:
+        if not owner_id or ttl_seconds < 30:
+            raise ValueError("A lease owner and at least 30 seconds TTL are required.")
+        now = datetime.now(UTC).timestamp()
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            cursor = db.execute(
+                """UPDATE cycle_leases SET expires_at=?
+                   WHERE lease_key=? AND owner_id=? AND expires_at>?""",
+                (now + ttl_seconds, lease_key, owner_id, now),
+            )
+            db.commit()
+            return cursor.rowcount == 1
 
     def release_cycle_lease(
         self, owner_id: str, *, lease_key: str = "binance_testnet_monitor"
@@ -434,6 +453,19 @@ class TradeJournal:
             db.commit()
         return inserted
 
+    def order_fills_complete(self, client_order_id: str) -> bool:
+        with self._connect() as db:
+            order = db.execute(
+                "SELECT filled FROM orders WHERE client_order_id=?", (client_order_id,)
+            ).fetchone()
+            if not order:
+                raise KeyError("order intent not found")
+            rows = db.execute(
+                "SELECT amount FROM fills WHERE client_order_id=?", (client_order_id,)
+            ).fetchall()
+            total = sum((Decimal(row["amount"]) for row in rows), Decimal(0))
+            return total == Decimal(order["filled"])
+
     def mark_fills_synced(self, client_order_id: str) -> None:
         with self._lock, self._connect() as db:
             db.execute(
@@ -441,14 +473,14 @@ class TradeJournal:
                 (_now(), client_order_id),
             )
 
-    def recent_orders(self, limit: int = 200) -> list[dict[str, Any]]:
+    def recent_orders(self, limit: int | None = None) -> list[dict[str, Any]]:
+        """Return every unresolved order; never truncate reconciliation by a page cap."""
         with self._connect() as db:
             return [dict(row) for row in db.execute(
                 """SELECT * FROM orders
                    WHERE status IN ('intent','open','partially_filled')
                       OR fills_synced=0
-                   ORDER BY created_at DESC LIMIT ?""",
-                (max(1, min(limit, 1000)),),
+                   ORDER BY created_at ASC"""
             ).fetchall()]
 
     def save_balance_snapshot(self, balances: dict[str, Any]) -> None:
@@ -491,18 +523,112 @@ class TradeJournal:
             gross_realized = sum(
                 (Decimal(row["gross_pnl"]) for row in realized_rows), Decimal(0)
             )
+            trades = [dict(r) for r in db.execute(
+                "SELECT * FROM trade_configs ORDER BY created_at DESC"
+            )]
+            orders = [dict(r) for r in db.execute(
+                "SELECT * FROM orders ORDER BY created_at DESC LIMIT 200"
+            )]
+            stored_positions = {
+                row["trade_id"]: dict(row)
+                for row in db.execute("SELECT * FROM positions")
+            }
+            joined_fills = [dict(row) for row in db.execute(
+                """SELECT f.*,o.side,o.symbol FROM fills f
+                   JOIN orders o ON o.client_order_id=f.client_order_id
+                   ORDER BY f.occurred_at,f.fill_key"""
+            )]
+            filled_by_order: dict[str, Decimal] = {}
+            for row in joined_fills:
+                filled_by_order[row["client_order_id"]] = (
+                    filled_by_order.get(row["client_order_id"], Decimal(0))
+                    + Decimal(row["amount"])
+                )
+            accounting_issues: list[str] = []
+            for order in db.execute(
+                "SELECT client_order_id,filled FROM orders WHERE CAST(filled AS REAL)>0"
+            ):
+                expected = Decimal(order["filled"])
+                actual = filled_by_order.get(order["client_order_id"], Decimal(0))
+                if actual != expected:
+                    accounting_issues.append(
+                        f"Fill history mismatch for {order['client_order_id']}: "
+                        f"order filled={expected}, recorded fills={actual}."
+                    )
+
+            fills_by_trade: dict[str, list[dict[str, object]]] = {}
+            symbols_by_trade: dict[str, str] = {}
+            for row in joined_fills:
+                fills_by_trade.setdefault(row["trade_id"], []).append({
+                    "id": row["fill_key"],
+                    "side": row["side"],
+                    "amount": row["amount"],
+                    "price": row["price"],
+                    "fee_cost": row["fee_cost"],
+                    "fee_currency": row["fee_currency"] or "",
+                    "timestamp": row["occurred_at"],
+                })
+                symbols_by_trade[row["trade_id"]] = row["symbol"]
+
+            positions: list[dict[str, Any]] = []
+            net_realized: list[dict[str, str]] = []
+            for trade_id, fills in fills_by_trade.items():
+                symbol = symbols_by_trade[trade_id]
+                try:
+                    ledger = replay_spot_fills(symbol, fills)
+                except AccountingError as exc:
+                    accounting_issues.append(f"Fill ledger error for {trade_id}: {exc}")
+                    continue
+                positions.append({
+                    "trade_id": trade_id,
+                    "symbol": symbol,
+                    "amount": str(ledger.base_quantity),
+                    "average_entry": str(ledger.average_entry),
+                    "status": "open" if ledger.base_quantity > 0 else "closed",
+                    "accounting_source": "exchange_fills",
+                })
+                net_realized.append({
+                    "trade_id": trade_id,
+                    "symbol": symbol,
+                    "quote_asset": ledger.quote_asset,
+                    "realized_quote_pnl": str(ledger.realized_quote_pnl),
+                })
+            exchange_totals = {
+                row["asset"]: Decimal(row["total"])
+                for row in db.execute("SELECT asset,total FROM account_balances")
+            }
+            required_base: dict[str, Decimal] = {}
+            for position in positions:
+                asset = str(position["symbol"]).split("/", maxsplit=1)[0]
+                required_base[asset] = required_base.get(asset, Decimal(0)) + Decimal(
+                    str(position["amount"])
+                )
+            balance_issues = [
+                f"Exchange total {asset} balance {exchange_totals.get(asset, Decimal(0))} "
+                f"is below bot-ledger inventory {required}."
+                for asset, required in required_base.items()
+                if exchange_totals.get(asset, Decimal(0)) < required
+            ]
+
+            # Legacy/test-only rows without trade-history records remain visible as
+            # provisional positions, but the mismatch above blocks automated action.
+            trades_with_fills = set(fills_by_trade)
+            for trade_id, position in stored_positions.items():
+                if trade_id not in trades_with_fills:
+                    provisional = dict(position)
+                    provisional["accounting_source"] = "cumulative_order_provisional"
+                    positions.append(provisional)
+
             return {
                 "balances": [dict(r) for r in db.execute(
                     "SELECT * FROM account_balances ORDER BY asset"
                 )],
-                "trades": [dict(r) for r in db.execute(
-                    "SELECT * FROM trade_configs ORDER BY created_at DESC"
-                )],
-                "orders": [dict(r) for r in db.execute(
-                    "SELECT * FROM orders ORDER BY created_at DESC LIMIT 200"
-                )],
+                "trades": trades,
+                "orders": orders,
                 "fills": [dict(r) for r in db.execute(
-                    "SELECT * FROM fills ORDER BY occurred_at DESC LIMIT 500"
+                    """SELECT f.*,o.side,o.symbol FROM fills f
+                       JOIN orders o ON o.client_order_id=f.client_order_id
+                       ORDER BY f.occurred_at DESC LIMIT 500"""
                 )],
                 "realizations": [dict(r) for r in db.execute(
                     "SELECT * FROM trade_realizations ORDER BY occurred_at DESC LIMIT 500"
@@ -512,6 +638,9 @@ class TradeJournal:
                     for currency, total in sorted(fee_totals.items())
                 ],
                 "gross_realized_pnl": str(gross_realized),
-                "positions": [dict(r) for r in db.execute("SELECT * FROM positions")],
+                "net_realized_quote_pnl": net_realized,
+                "accounting_issues": accounting_issues,
+                "balance_issues": balance_issues,
+                "positions": positions,
                 "emergency_stop": self.emergency_stopped(),
             }

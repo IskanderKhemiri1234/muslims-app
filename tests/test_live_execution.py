@@ -48,5 +48,18 @@ def test_live_mode_fails_closed_without_explicit_enable_flag():
         max_order_quote=Decimal(10),
         allowed_symbols=frozenset({"BTC/USDT"}),
     )
-    with pytest.raises(ExecutionDisabled, match="Live trading is disabled"):
+    with pytest.raises(ExecutionDisabled, match="not available in this Testnet release"):
+        BinanceSpotExecution(settings)
+
+
+def test_production_live_mode_is_unavailable_even_when_flag_is_enabled():
+    settings = ExecutionSettings(
+        api_key="test-key",
+        api_secret="test-secret",
+        testnet=False,
+        live_enabled=True,
+        max_order_quote=Decimal(10),
+        allowed_symbols=frozenset({"BTC/USDT"}),
+    )
+    with pytest.raises(ExecutionDisabled, match="not available in this Testnet release"):
         BinanceSpotExecution(settings)

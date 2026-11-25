@@ -27,7 +27,7 @@ table{width:100%;border-collapse:collapse;min-width:480px}td,th{text-align:left;
 </head>
 <body><main>
 <header class="top">
- <div><h1>Iskander AI Trade</h1><div class="muted">Multi-market research · Spot · Paper mode</div><div class="tag" style="display:inline-block;margin-top:8px">PAPER ONLY · NO LIVE ORDERS</div></div>
+ <div><h1>Iskander AI Trade</h1><div class="muted">Multi-market research · Binance Spot Testnet · Live locked</div><div class="tag" style="display:inline-block;margin-top:8px">TESTNET SANDBOX ONLY · LIVE LOCKED</div></div>
  <div class="auth">
   <div class="auth-line"><input id="token" type="password" autocomplete="current-password" placeholder="Dashboard access token" aria-label="Dashboard access token"><button id="connectBtn" onclick="connect()">Connect</button></div>
   <label class="remember"><input id="rememberToken" type="checkbox"> Remember token on this device</label>
@@ -57,6 +57,7 @@ table{width:100%;border-collapse:collapse;min-width:480px}td,th{text-align:left;
   <input id="tradeTarget" inputmode="decimal" aria-label="Take profit price" placeholder="Take profit">
  </div>
  <div class="button-row" style="margin-top:12px">
+  <button class="secondary" onclick="runTestnetPreflight()">Check Binance Testnet connection</button>
   <button onclick="createTestnetTrade()">Save trade settings</button>
   <button class="secondary" onclick="refreshTestnet()">Refresh Testnet state</button>
   <button class="secondary" onclick="runTestnetCycle()">Run Testnet monitor cycle</button>
@@ -65,6 +66,16 @@ table{width:100%;border-collapse:collapse;min-width:480px}td,th{text-align:left;
  </div>
  <div class="scroll" style="margin-top:12px"><table><thead><tr><th>Pair</th><th>Quantity</th><th>Entry</th><th>Stop</th><th>Target</th><th>Status</th><th>Control</th></tr></thead><tbody id="testnetTrades"><tr><td colspan="7">Connect to load Testnet trade settings.</td></tr></tbody></table></div>
  <div class="scroll" style="margin-top:12px"><table><thead><tr><th>Asset</th><th>Free</th><th>Used</th><th>Total</th><th>Last sync</th></tr></thead><tbody id="testnetBalances"><tr><td colspan="5">No exchange balance sync yet.</td></tr></tbody></table></div>
+ <h2 style="margin-top:18px">Order reconciliation</h2>
+ <div class="scroll" style="margin-top:8px"><table><thead><tr><th>Client order</th><th>Pair</th><th>Side</th><th>Filled</th><th>Status</th><th>Fill sync</th></tr></thead><tbody id="testnetOrders"><tr><td colspan="6">No orders recorded.</td></tr></tbody></table></div>
+ <h2 style="margin-top:18px">Exchange fills & commissions</h2>
+ <div class="scroll" style="margin-top:8px"><table><thead><tr><th>Fill</th><th>Side</th><th>Quantity</th><th>Price</th><th>Fee</th></tr></thead><tbody id="testnetFills"><tr><td colspan="5">No fills recorded.</td></tr></tbody></table></div>
+ <div class="grid" style="margin-top:12px">
+  <div><div class="muted small">Gross realized P/L</div><div class="metric" id="testnetGross">—</div></div>
+  <div><div class="muted small">Realized quote P/L after quote/base fees</div><div class="metric" id="testnetNet">—</div></div>
+  <div><div class="muted small">Commissions by asset (third-asset fees separate)</div><div id="testnetFees" class="muted small">—</div></div>
+ </div>
+ <p class="muted small" id="testnetAccounting">Accounting reconciliation has not run.</p>
  <p class="muted small" id="testnetState">Testnet journal and emergency-stop state are not loaded.</p>
 </section>
 <section class="panel">
@@ -77,7 +88,7 @@ table{width:100%;border-collapse:collapse;min-width:480px}td,th{text-align:left;
  <div class="scroll"><table><thead><tr><th>Market</th><th>Samples</th><th>Accuracy</th><th>Baseline</th><th>Assessment</th></tr></thead><tbody id="ml-results"><tr><td colspan="5">No evaluation run yet.</td></tr></tbody></table></div>
 </section>
 <section class="panel"><h2>Recent paper trades</h2><div class="scroll"><table><thead><tr><th>Market</th><th>Side</th><th>Price</th><th>Reason</th></tr></thead><tbody id="trades"><tr><td colspan="4">Connect to load trade history.</td></tr></tbody></table></div></section>
-<footer class="foot">Research and simulation only. This dashboard cannot submit exchange orders. On free hosting, the service may sleep during inactivity; local JSON state may be lost after some restarts or redeployments.</footer>
+<footer class="foot">Paper research is isolated from Binance Spot Testnet. Testnet order routes use sandbox credentials only; Live execution is not exposed. Verify persistent server storage and backups before relying on restart recovery. Third-asset commissions are reported separately unless a trusted conversion price is available.</footer>
 </main>
 <script>
 const TOKEN_KEY="iskander_ai_trade_dashboard_token_v1";
@@ -98,12 +109,28 @@ async function refreshDashboard(){if(!token){setStatus("Connect first to refresh
 async function refreshMarkets(){if(!token){setStatus("Connect first to update prices.","bad");return}el("marketRefreshBtn").disabled=true;setStatus("Updating market prices…","busy");try{renderMarkets(await request("/api/v1/markets"));el("lastUpdated").textContent="Updated "+new Date().toLocaleTimeString();setStatus("Market prices updated.","good");}catch(e){setStatus("Price update failed: "+e.message,"bad");}finally{el("marketRefreshBtn").disabled=false}}
 async function runCycle(){if(!token){setStatus("Connect before running a paper cycle.","bad");return}setBusy("cycle",true);setStatus("Paper cycle running: requesting market candles and checking configured markets…","busy");try{const result=await request("/api/v1/paper/cycle",{method:"POST"});if(result.portfolio)renderPortfolio(result.portfolio);await refreshMarkets();el("lastUpdated").textContent="Completed "+new Date().toLocaleTimeString();setStatus("Paper cycle completed successfully. No live orders were sent.","good");}catch(e){setStatus("Paper cycle failed: "+e.message,"bad");}finally{setBusy("cycle",false)}}
 async 
+async function runTestnetPreflight(){
+ try{
+  setStatus("Checking authenticated Binance Spot Testnet connection (read-only)…","busy");
+  const result=await request("/api/v1/testnet/preflight");
+  setStatus("Testnet connected · "+(result.allowed_symbols||[]).join(", ")+" · no orders submitted.","good");
+  await refreshTestnet();
+ }catch(e){setStatus("Testnet preflight failed: "+e.message,"bad")}
+}
 async function refreshTestnet(){const s=await request("/api/v1/testnet/trades");renderTestnet(s)}
 function renderTestnet(s){
- const trades=s.trades||[],orders=s.orders||[],positions=s.positions||[];
- el("testnetTrades").innerHTML=trades.map(t=>"<tr><td>"+escapeHtml(t.symbol)+"</td><td>"+escapeHtml(t.quantity)+"</td><td>"+escapeHtml(t.entry_price)+"</td><td>"+escapeHtml(t.stop_loss_price)+"</td><td>"+escapeHtml(t.take_profit_price)+"</td><td>"+escapeHtml(t.status)+(t.enabled?" · armed":"")+"</td><td><button class='secondary' onclick=\"tradeControl('"+escapeHtml(t.trade_id)+"','"+(t.enabled?"pause":"enable")+"')\">"+(t.enabled?"Pause":"Arm")+"</button></td></tr>").join("")||"<tr><td colspan='7'>No configured Testnet trades.</td></tr>";
+ const trades=s.trades||[],orders=s.orders||[],positions=s.positions||[],fills=s.fills||[];
+ el("testnetTrades").innerHTML=trades.map(t=>"<tr><td>"+escapeHtml(t.symbol)+"</td><td>"+escapeHtml(t.quantity)+"</td><td>"+escapeHtml(t.entry_price)+"</td><td>"+escapeHtml(t.stop_loss_price)+"</td><td>"+escapeHtml(t.take_profit_price)+"</td><td>"+escapeHtml(t.status)+(t.enabled?" · armed":"")+"</td><td><button class='secondary' onclick="\"tradeControl('"+escapeHtml(t.trade_id)+"','"+(t.enabled?"pause":"enable")+"')\">"+(t.enabled?"Pause":"Arm")+"</button></td></tr>").join("")||"<tr><td colspan='7'>No configured Testnet trades.</td></tr>";
  el("testnetBalances").innerHTML=(s.balances||[]).map(b=>"<tr><td>"+escapeHtml(b.asset)+"</td><td>"+escapeHtml(b.free)+"</td><td>"+escapeHtml(b.used)+"</td><td>"+escapeHtml(b.total)+"</td><td>"+escapeHtml(b.observed_at)+"</td></tr>").join("")||"<tr><td colspan='5'>No exchange balance sync yet.</td></tr>";
- el("testnetState").textContent="Emergency stop: "+(s.emergency_stop?"ACTIVE":"released")+" · Stored orders: "+orders.length+" · Positions: "+positions.length;
+ el("testnetOrders").innerHTML=orders.map(o=>"<tr><td>"+escapeHtml(o.client_order_id)+"</td><td>"+escapeHtml(o.symbol)+"</td><td>"+escapeHtml(o.side)+"</td><td>"+escapeHtml(o.filled)+" / "+escapeHtml(o.amount)+"</td><td>"+escapeHtml(o.status)+"</td><td>"+(o.fills_synced?"complete":"pending")+"</td></tr>").join("")||"<tr><td colspan='6'>No orders recorded.</td></tr>";
+ el("testnetFills").innerHTML=fills.map(f=>"<tr><td>"+escapeHtml(f.fill_key)+"</td><td>"+escapeHtml(f.side||"—")+"</td><td>"+escapeHtml(f.amount)+"</td><td>"+escapeHtml(f.price)+"</td><td>"+escapeHtml(f.fee_cost)+" "+escapeHtml(f.fee_currency||"")+"</td></tr>").join("")||"<tr><td colspan='4'>No fills recorded.</td></tr>";
+ el("testnetGross").textContent=escapeHtml(s.gross_realized_pnl||"0");
+ const net=(s.net_realized_quote_pnl||[]).map(x=>escapeHtml(x.realized_quote_pnl)+" "+escapeHtml(x.quote_asset)).join(" · ");
+ el("testnetNet").textContent=net||"—";
+ el("testnetFees").textContent=(s.fee_totals||[]).map(x=>escapeHtml(x.total_fee)+" "+escapeHtml(x.currency)).join(" · ")||"No commissions recorded";
+ const issues=s.accounting_issues||[],balanceIssues=s.balance_issues||[];
+ el("testnetAccounting").textContent=issues.length||balanceIssues.length?"Reconciliation BLOCKED: "+issues.concat(balanceIssues).join(" | "):"Fill quantities and bot inventory reconcile with the stored exchange balances.";
+ el("testnetState").textContent="Emergency stop: "+(s.emergency_stop?"ACTIVE":"released")+" · Cycle: "+escapeHtml(s.reason||s.status||"—")+" · Stored orders: "+orders.length+" · Positions: "+positions.length;
 }
 async function createTestnetTrade(){
  const payload={symbol:el("tradeSymbol").value.trim(),quantity:el("tradeQty").value.trim(),entry_price:el("tradeEntry").value.trim(),stop_loss_price:el("tradeStop").value.trim(),take_profit_price:el("tradeTarget").value.trim()};
