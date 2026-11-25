@@ -5,7 +5,10 @@ from iskander_trade.testnet_trade_service import TestnetTradeService as TradeSer
 
 class FakeTestnetAdapter:
     def __init__(self, price):
-        self.settings = type("Settings", (), {"testnet": True, "live_enabled": False})()
+        self.settings = type("Settings", (), {
+            "testnet": True, "live_enabled": False,
+            "allowed_symbols": frozenset({"BTC/USDT"}),
+        })()
         self.price = Decimal(price)
         self.orders = {}
         self.closed = False
@@ -118,3 +121,27 @@ def test_testnet_preflight_is_read_only_and_reports_connection(tmp_path, monkeyp
     assert result["prices"] == {"BTC/USDT": "60000"}
     assert adapter.market_sides == []
     assert adapter.closed is True
+
+def test_pending_unfilled_buy_is_not_duplicated_on_next_cycle(tmp_path, monkeypatch):
+    service, _trade, adapter = _armed_service(tmp_path, monkeypatch, "60000")
+
+    def create_unfilled_limit(symbol, side, amount, price, client_order_id):
+        adapter.market_sides.append(side)
+        order = {
+            "id": "buy-order-pending", "filled": "0", "remaining": str(amount),
+            "average": None, "status": "open",
+        }
+        adapter.orders[client_order_id] = order
+        return order
+
+    adapter.create_limit_order = create_unfilled_limit
+    first = service.cycle()
+    assert first["actions"][0]["action"] == "entry_limit"
+
+    adapter.price = Decimal("59900")
+    second = service.cycle()
+
+    assert second["actions"] == []
+    assert adapter.market_sides == ["buy"]
+    assert len(second["orders"]) == 1
+
