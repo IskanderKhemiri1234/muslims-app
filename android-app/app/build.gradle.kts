@@ -4,7 +4,7 @@ plugins {
 }
 
 val releaseStorePath = System.getenv("ANDROID_KEYSTORE_PATH")
-val releaseStoreType = System.getenv("ANDROID_KEYSTORE_TYPE") ?: "PKCS12"
+val releaseStoreType = System.getenv("ANDROID_KEYSTORE_TYPE")?.takeIf { it.isNotBlank() } ?: "PKCS12"
 
 android {
     namespace = "com.iskander.aitrade"
