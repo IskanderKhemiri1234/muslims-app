@@ -67,10 +67,14 @@ class BinanceSpotExecution:
         self.settings = settings or ExecutionSettings.from_env()
         if not self.settings.api_key or not self.settings.api_secret:
             raise ExecutionDisabled("Binance API credentials are not configured on the server.")
-        if not self.settings.testnet and not self.settings.live_enabled:
-            raise ExecutionDisabled("Live trading is disabled. Testnet is required.")
-        if self.settings.testnet and self.settings.live_enabled:
-            raise ExecutionDisabled("Conflicting flags: disable live trading while using Testnet.")
+        if not self.settings.testnet:
+            raise ExecutionDisabled(
+                "Production Live execution is not available in this Testnet release."
+            )
+        if self.settings.live_enabled:
+            raise ExecutionDisabled(
+                "Conflicting flags: ENABLE_LIVE_TRADING must remain false in Testnet."
+            )
 
         self.exchange = ccxt.binance({
             "apiKey": self.settings.api_key,
