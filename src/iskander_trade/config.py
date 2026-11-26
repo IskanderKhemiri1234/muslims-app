@@ -53,8 +53,9 @@ class Settings:
         # A manual Live flag must never switch the strategy worker into Live mode.
         if self.mode != "paper":
             raise ValueError(
-                "MODE controls the automated strategy engine and must remain 'paper'. "
-                "Testnet and manual Live are separate execution paths with independent "
+                "This build supports paper mode only for the automated strategy engine; "
+                "MODE must remain 'paper'. Testnet and manual Live are separate execution "
+                "paths with independent "
                 "credentials, explicit server flags, operator arming and emergency stop."
             )
         if not self.watchlist:
