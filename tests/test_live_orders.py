@@ -73,6 +73,7 @@ def test_position_limit_counts_pending_buy_reservations(tmp_path, monkeypatch):
 
 
 def test_daily_loss_blocks_buys_but_does_not_block_manual_sell_exit(tmp_path, monkeypatch):
+    from datetime import UTC, datetime
     from decimal import Decimal
 
     service = _armed_service(tmp_path, monkeypatch)
@@ -80,13 +81,15 @@ def test_daily_loss_blocks_buys_but_does_not_block_manual_sell_exit(tmp_path, mo
     with service._connect() as db:
         db.execute(
             """INSERT INTO live_positions(symbol,amount,average_entry,updated_at)
-               VALUES('BTC/USDT','0.2','100','2026-11-25T00:00:00+00:00')"""
+               VALUES('BTC/USDT','0.2','100',?)""",
+            (datetime.now(UTC).isoformat(),),
         )
         db.execute(
             """INSERT INTO live_fills(fill_key,client_order_id,symbol,side,amount,price,
                fee_cost,fee_currency,realized_pnl_quote,occurred_at)
                VALUES('loss-fill','order-loss','BTC/USDT','sell','0.1','40','0','USDT',
-               '-6','2026-11-25T12:00:00+00:00')"""
+               '-6',?)""",
+            (datetime.now(UTC).isoformat(),),
         )
     try:
         service._risk_gate("BTC/USDT", "buy", Decimal("0.01"), Decimal(100))
