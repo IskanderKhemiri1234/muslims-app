@@ -1,4 +1,4 @@
-"""Validated application configuration. Live trading is intentionally unavailable."""
+"""Validated Paper strategy-engine configuration; manual exchange controls are isolated."""
 
 from __future__ import annotations
 
@@ -48,10 +48,14 @@ class Settings:
     log_level: str = os.getenv("LOG_LEVEL", "INFO").upper()
 
     def validate(self) -> None:
+        # MODE selects the automated strategy engine only. Keep it on Paper:
+        # Binance Testnet and manual Live have separate, fail-closed API gates.
+        # A manual Live flag must never switch the strategy worker into Live mode.
         if self.mode != "paper":
             raise ValueError(
-                "This build supports paper mode only. Live/testnet order execution "
-                "has not been implemented or safety-reviewed."
+                "MODE controls the automated strategy engine and must remain 'paper'. "
+                "Testnet and manual Live are separate execution paths with independent "
+                "credentials, explicit server flags, operator arming and emergency stop."
             )
         if not self.watchlist:
             raise ValueError("WATCHLIST must contain at least one market.")
