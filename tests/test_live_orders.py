@@ -111,3 +111,48 @@ def test_repeated_client_request_id_is_not_submitted_again(tmp_path, monkeypatch
         order_type="limit", amount="0.001", price="50000",
     )
     assert len(result["orders"]) == 1
+
+
+def test_daily_loss_gate_includes_adverse_unrealized_position_loss(tmp_path, monkeypatch):
+    from decimal import Decimal
+
+    service = _armed_service(tmp_path, monkeypatch)
+    monkeypatch.setenv("MAX_DAILY_LOSS_QUOTE", "5")
+    with service._connect() as db:
+        db.execute(
+            """INSERT INTO live_positions(symbol,amount,average_entry,updated_at)
+               VALUES('BTC/USDT','0.2','100','2026-11-26T00:00:00+00:00')"""
+        )
+
+    class PriceAdapter:
+        def fetch_last_price(self, symbol):
+            assert symbol == "BTC/USDT"
+            return Decimal("70")
+
+    try:
+        service._risk_gate("BTC/USDT", "buy", Decimal("0.01"), Decimal("70"), PriceAdapter())
+        assert False, "adverse unrealized loss must count toward the daily risk gate"
+    except LiveOrderError:
+        pass
+    # Risk controls must not prevent a manual sell that reduces exposure.
+    service._risk_gate("BTC/USDT", "sell", Decimal("0.1"), Decimal("70"), PriceAdapter())
+
+
+def test_unvalued_commission_blocks_new_buys(tmp_path, monkeypatch):
+    from datetime import UTC, datetime
+    from decimal import Decimal
+
+    service = _armed_service(tmp_path, monkeypatch)
+    with service._connect() as db:
+        db.execute(
+            """INSERT INTO live_fills(fill_key,client_order_id,symbol,side,amount,price,
+               fee_cost,fee_currency,fee_conversion_complete,realized_pnl_quote,occurred_at)
+               VALUES('unknown-fee','order-unknown-fee','BTC/USDT','sell','0.01','100',
+               '0.02','BNB',0,'0',?)""",
+            (datetime.now(UTC).isoformat(),),
+        )
+    try:
+        service._risk_gate("BTC/USDT", "buy", Decimal("0.001"), Decimal("100"))
+        assert False, "unvalued commission must block new buys"
+    except LiveOrderError:
+        pass
