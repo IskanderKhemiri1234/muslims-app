@@ -156,3 +156,35 @@ def test_unvalued_commission_blocks_new_buys(tmp_path, monkeypatch):
         assert False, "unvalued commission must block new buys"
     except LiveOrderError:
         pass
+
+
+def test_live_order_service_refuses_testnet_adapter(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    import pytest
+    from iskander_trade import live_orders as live_orders_module
+    from iskander_trade.live_execution import ExecutionDisabled
+
+    monkeypatch.setenv("LIVE_CONTROL_DB", str(tmp_path / "control-testnet.sqlite3"))
+    monkeypatch.setenv("LIVE_ORDERS_DB", str(tmp_path / "orders-testnet.sqlite3"))
+    monkeypatch.setenv("ENABLE_LIVE_TRADING", "true")
+    monkeypatch.setenv("LIVE_MANUAL_ORDERS_ENABLED", "true")
+    service = LiveManualOrderService()
+    service.control.set_stopped(False)
+    service.arm()
+
+    class TestnetAdapter:
+        settings = SimpleNamespace(testnet=True, live_enabled=False)
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(live_orders_module, "BinanceSpotExecution", TestnetAdapter)
+    with pytest.raises(ExecutionDisabled):
+        service.submit(
+            request_id="testnet-request-0001",
+            symbol="BTC/USDT",
+            side="buy",
+            order_type="limit",
+            amount="0.001",
+            price="50000",
+        )
