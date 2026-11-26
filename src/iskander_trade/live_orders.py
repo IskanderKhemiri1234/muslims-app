@@ -41,6 +41,8 @@ class LiveManualOrderService:
                     fill_key TEXT PRIMARY KEY, client_order_id TEXT NOT NULL,
                     symbol TEXT NOT NULL, side TEXT NOT NULL, amount TEXT NOT NULL,
                     price TEXT NOT NULL, fee_cost TEXT NOT NULL, fee_currency TEXT,
+                    fee_quote_cost TEXT NOT NULL DEFAULT '0',
+                    fee_conversion_complete INTEGER NOT NULL DEFAULT 1,
                     realized_pnl_quote TEXT NOT NULL DEFAULT '0', occurred_at TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS live_positions(
@@ -60,6 +62,11 @@ class LiveManualOrderService:
             if "request_id" not in cols:
                 db.execute("ALTER TABLE live_orders ADD COLUMN request_id TEXT")
                 db.execute("CREATE UNIQUE INDEX IF NOT EXISTS live_orders_request_id_idx ON live_orders(request_id)")
+            fill_cols = {row["name"] for row in db.execute("PRAGMA table_info(live_fills)")}
+            if "fee_quote_cost" not in fill_cols:
+                db.execute("ALTER TABLE live_fills ADD COLUMN fee_quote_cost TEXT NOT NULL DEFAULT '0'")
+            if "fee_conversion_complete" not in fill_cols:
+                db.execute("ALTER TABLE live_fills ADD COLUMN fee_conversion_complete INTEGER NOT NULL DEFAULT 1")
 
     def _connect(self) -> sqlite3.Connection:
         db = sqlite3.connect(self.path, timeout=20)
