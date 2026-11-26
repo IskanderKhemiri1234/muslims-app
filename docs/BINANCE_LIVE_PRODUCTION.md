@@ -66,7 +66,9 @@ complete tax/accounting report. Position tracking starts from fills recorded by
 this Live journal; pre-existing exchange holdings are not silently treated as
 managed positions. Reconcile and compare exchange balances before arming.
 
-The current manual Live feature is an integration foundation, not a certified
-production trading system. It still requires CI success, exchange sandbox/mock
-tests for every order lifecycle edge case, deployment persistence verification,
-and independent review before enabling real-money credentials.
+The manual Live API and dashboard controls are connected, but this branch is not
+a certified production trading system. CI/mock tests do not prove connectivity
+to the user's Binance Spot Testnet account. A real Testnet preflight and order
+lifecycle run with dedicated Testnet credentials, plus deployment persistence
+verification and independent review, are required before considering real-money
+credentials. Keep Live flags false and do not place real orders during this stage.
