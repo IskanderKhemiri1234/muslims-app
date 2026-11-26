@@ -390,7 +390,7 @@ class LiveManualOrderService:
                             if fee_mark is None:
                                 raise ValueError("Commission conversion price unavailable")
                             fee_quote_cost = fee_cost * Decimal(str(fee_mark))
-                        except Exception:
+                        except (ccxt.BaseError, KeyError, TypeError, ValueError, ArithmeticError):
                             fee_conversion_complete = 0
                     else:
                         fee_conversion_complete = 0
