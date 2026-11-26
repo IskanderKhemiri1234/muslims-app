@@ -67,6 +67,17 @@ class LiveManualOrderService:
                 db.execute("ALTER TABLE live_fills ADD COLUMN fee_quote_cost TEXT NOT NULL DEFAULT '0'")
             if "fee_conversion_complete" not in fill_cols:
                 db.execute("ALTER TABLE live_fills ADD COLUMN fee_conversion_complete INTEGER NOT NULL DEFAULT 1")
+            # Legacy fills did not value commissions paid in a third asset.
+            db.execute(
+                """UPDATE live_fills SET fee_conversion_complete=0
+                   WHERE CAST(fee_cost AS REAL)>0
+                   AND (fee_currency IS NULL
+                        OR fee_currency NOT IN (
+                            substr(symbol,1,instr(symbol,'/')-1),
+                            substr(symbol,instr(symbol,'/')+1)
+                        ))
+                   AND fee_quote_cost='0'"""
+            )
 
     def _connect(self) -> sqlite3.Connection:
         db = sqlite3.connect(self.path, timeout=20)
@@ -131,6 +142,9 @@ class LiveManualOrderService:
             )]
             positions = [dict(r) for r in db.execute("SELECT * FROM live_positions")]
             balances = [dict(r) for r in db.execute("SELECT * FROM live_balances ORDER BY asset")]
+            incomplete_fee_count = db.execute(
+                "SELECT COUNT(*) AS n FROM live_fills WHERE fee_conversion_complete=0"
+            ).fetchone()["n"]
             utc_day = datetime.now(UTC).date().isoformat()
             pnl_rows = db.execute(
                 "SELECT realized_pnl_quote FROM live_fills WHERE substr(occurred_at,1,10)=?",
@@ -147,6 +161,8 @@ class LiveManualOrderService:
             "positions": positions,
             "balances": balances,
             "daily_realized_pnl_quote": str(pnl),
+            "accounting_complete": incomplete_fee_count == 0,
+            "unvalued_commission_count": incomplete_fee_count,
             "orders_enabled": self._armed() and not self.control.stopped(),
         }
 
@@ -186,9 +202,7 @@ class LiveManualOrderService:
                 (day,),
             ).fetchall()
             incomplete_fee = db.execute(
-                """SELECT COUNT(*) AS n FROM live_fills
-                   WHERE substr(occurred_at,1,10)=? AND fee_conversion_complete=0""",
-                (day,),
+                "SELECT COUNT(*) AS n FROM live_fills WHERE fee_conversion_complete=0"
             ).fetchone()["n"]
             positions_for_mark = [
                 (r["symbol"], Decimal(r["amount"]), Decimal(r["average_entry"]))
