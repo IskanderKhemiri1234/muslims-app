@@ -2,7 +2,7 @@ name: ISKANDER AI TRADE Live Production Gate
 
 on:
   push:
-    branches: [feature/binance-live-production-v1]
+    branches: [feature/binance-live-production-v1, feature/manual-live-safety-v2]
   workflow_dispatch:
 
 permissions:
