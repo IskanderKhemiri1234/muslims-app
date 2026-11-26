@@ -357,12 +357,37 @@ class LiveManualOrderService:
                 fee_currency = fee.get("currency") or info.get("commissionAsset")
                 occurred = str(fill.get("datetime") or datetime.now(UTC).isoformat())
                 key = client_id + ":" + str(fill_id)
+                base_asset, quote_asset = symbol.split("/", maxsplit=1)
+                fee_quote_cost = Decimal(0)
+                fee_conversion_complete = 1
+                if fee_cost > 0:
+                    if fee_currency == quote_asset:
+                        fee_quote_cost = fee_cost
+                    elif fee_currency == base_asset:
+                        fee_quote_cost = fee_cost * price
+                    elif fee_currency:
+                        fee_market = f"{fee_currency}/{quote_asset}"
+                        try:
+                            fee_market_info = adapter.exchange.market(fee_market)
+                            if not fee_market_info or fee_market_info.get("active") is False:
+                                raise ValueError("Commission conversion market unavailable")
+                            fee_ticker = adapter.exchange.fetch_ticker(fee_market)
+                            fee_mark = fee_ticker.get("last")
+                            if fee_mark is None:
+                                raise ValueError("Commission conversion price unavailable")
+                            fee_quote_cost = fee_cost * Decimal(str(fee_mark))
+                        except Exception:
+                            fee_conversion_complete = 0
+                    else:
+                        fee_conversion_complete = 0
                 cur = db.execute(
                     """INSERT OR IGNORE INTO live_fills(fill_key,client_order_id,symbol,side,
-                       amount,price,fee_cost,fee_currency,occurred_at)
-                       VALUES(?,?,?,?,?,?,?,?,?)""",
+                       amount,price,fee_cost,fee_currency,fee_quote_cost,
+                       fee_conversion_complete,occurred_at)
+                       VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
                     (key, client_id, symbol, str(order.get("side") or ""),
-                     str(amount), str(price), str(fee_cost), fee_currency, occurred),
+                     str(amount), str(price), str(fee_cost), fee_currency,
+                     str(fee_quote_cost), fee_conversion_complete, occurred),
                 )
                 if cur.rowcount != 1:
                     continue
@@ -372,15 +397,14 @@ class LiveManualOrderService:
                 old_amount = Decimal(position["amount"]) if position else Decimal(0)
                 old_avg = Decimal(position["average_entry"]) if position else Decimal(0)
                 realized = Decimal(0)
-                base_asset, quote_asset = symbol.split("/", maxsplit=1)
                 if order.get("side") == "buy":
                     net_amount = amount - fee_cost if fee_currency == base_asset else amount
                     if net_amount <= 0:
                         raise LiveOrderError("Buy fill commission consumed the entire base quantity.")
                     new_amount = old_amount + net_amount
                     quote_cost = old_amount * old_avg + amount * price
-                    if fee_currency == quote_asset:
-                        quote_cost += fee_cost
+                    if fee_currency == quote_asset or fee_conversion_complete:
+                        quote_cost += fee_quote_cost
                     avg = quote_cost / new_amount if new_amount else Decimal(0)
                     db.execute(
                         """INSERT INTO live_positions(symbol,amount,average_entry,updated_at)
@@ -395,7 +419,15 @@ class LiveManualOrderService:
                     debited_amount = amount + base_fee
                     if debited_amount > old_amount:
                         raise LiveOrderError("Exchange sell fill and base commission exceed locally journaled Spot position.")
-                    realized = amount * (price - old_avg) - quote_fee - (base_fee * old_avg)
+                    other_fee_quote = (
+                        fee_quote_cost
+                        if fee_currency not in {base_asset, quote_asset} and fee_conversion_complete
+                        else Decimal(0)
+                    )
+                    realized = (
+                        amount * (price - old_avg) - quote_fee
+                        - (base_fee * old_avg) - other_fee_quote
+                    )
                     remaining = old_amount - debited_amount
                     if remaining == 0:
                         db.execute("DELETE FROM live_positions WHERE symbol=?", (symbol,))
@@ -405,8 +437,9 @@ class LiveManualOrderService:
                             (str(remaining), datetime.now(UTC).isoformat(), symbol),
                         )
                 db.execute(
-                    "UPDATE live_fills SET realized_pnl_quote=? WHERE fill_key=?",
-                    (str(realized), key),
+                    """UPDATE live_fills SET realized_pnl_quote=?,fee_quote_cost=?,
+                       fee_conversion_complete=? WHERE fill_key=?""",
+                    (str(realized), str(fee_quote_cost), fee_conversion_complete, key),
                 )
             db.commit()
 
