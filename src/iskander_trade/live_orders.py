@@ -143,7 +143,10 @@ class LiveManualOrderService:
             "orders_enabled": self._armed() and not self.control.stopped(),
         }
 
-    def _risk_gate(self, symbol: str, side: str, amount: Decimal, price: Decimal) -> None:
+    def _risk_gate(
+        self, symbol: str, side: str, amount: Decimal, price: Decimal,
+        adapter: BinanceSpotExecution | None = None,
+    ) -> None:
         if not self._truth("ENABLE_LIVE_TRADING") or not self._truth("LIVE_MANUAL_ORDERS_ENABLED"):
             raise LiveOrderError("Live order submission is disabled by server configuration.")
         if not self._armed() or self.control.stopped():
@@ -175,11 +178,43 @@ class LiveManualOrderService:
                 "SELECT realized_pnl_quote FROM live_fills WHERE substr(occurred_at,1,10)=?",
                 (day,),
             ).fetchall()
+            incomplete_fee = db.execute(
+                """SELECT COUNT(*) AS n FROM live_fills
+                   WHERE substr(occurred_at,1,10)=? AND fee_conversion_complete=0""",
+                (day,),
+            ).fetchone()["n"]
+            positions_for_mark = [
+                (r["symbol"], Decimal(r["amount"]), Decimal(r["average_entry"]))
+                for r in db.execute("SELECT symbol,amount,average_entry FROM live_positions")
+            ]
             daily_pnl = sum((Decimal(r["realized_pnl_quote"]) for r in pnl_rows), Decimal(0))
         if side == "buy" and open_count >= max_open_orders:
             raise LiveOrderError("Maximum number of open Live orders reached.")
+        if side == "buy" and incomplete_fee:
+            raise LiveOrderError(
+                "Daily P/L is incomplete because commission conversion is unavailable; "
+                "new buys are blocked until accounting is reconciled."
+            )
+        if side == "buy" and adapter is not None:
+            # Count adverse unrealized losses conservatively; never offset realized losses
+            # with open gains. If a market price is unavailable, fail closed for new buys.
+            unrealized_loss = Decimal(0)
+            try:
+                for position_symbol, position_amount, average_entry in positions_for_mark:
+                    mark = adapter.fetch_last_price(position_symbol)
+                    mark_pnl = position_amount * (mark - average_entry)
+                    if mark_pnl < 0:
+                        unrealized_loss += mark_pnl
+            except Exception as exc:
+                raise LiveOrderError(
+                    "Cannot mark open positions to market; new buys are blocked."
+                ) from exc
+            daily_pnl += unrealized_loss
         if side == "buy" and daily_pnl <= -max_daily_loss:
-            raise LiveOrderError("Daily realized-loss limit reached; new buy orders are blocked.")
+            raise LiveOrderError(
+                "Daily loss limit reached after realized P/L and adverse open-position losses; "
+                "new buy orders are blocked."
+            )
         if side == "buy":
             with self._connect() as db:
                 position = db.execute(
@@ -240,7 +275,7 @@ class LiveManualOrderService:
                 raise LiveOrderError("This Live risk ledger currently accepts USDT-quoted Spot pairs only.")
             reference = Decimal(str(price)) if price else adapter.fetch_last_price(normalized)
             qty = Decimal(str(amount))
-            self._risk_gate(normalized, side, qty, reference)
+            self._risk_gate(normalized, side, qty, reference, adapter)
             # Validate against exchange precision and notional before writing intent.
             adapter._validate(normalized, side, qty, reference)
             if side == "buy":
