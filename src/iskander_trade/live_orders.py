@@ -403,7 +403,9 @@ class LiveManualOrderService:
                         raise LiveOrderError("Buy fill commission consumed the entire base quantity.")
                     new_amount = old_amount + net_amount
                     quote_cost = old_amount * old_avg + amount * price
-                    if fee_currency == quote_asset or fee_conversion_complete:
+                    if fee_currency == quote_asset or (
+                        fee_currency not in {base_asset, quote_asset} and fee_conversion_complete
+                    ):
                         quote_cost += fee_quote_cost
                     avg = quote_cost / new_amount if new_amount else Decimal(0)
                     db.execute(
