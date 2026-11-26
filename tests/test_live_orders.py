@@ -130,15 +130,15 @@ def test_daily_loss_gate_includes_adverse_unrealized_position_loss(tmp_path, mon
     class PriceAdapter:
         def fetch_last_price(self, symbol):
             assert symbol == "BTC/USDT"
-            return Decimal("70")
+            return Decimal(70)
 
     try:
-        service._risk_gate("BTC/USDT", "buy", Decimal("0.01"), Decimal("70"), PriceAdapter())
+        service._risk_gate("BTC/USDT", "buy", Decimal("0.01"), Decimal(70), PriceAdapter())
         assert False, "adverse unrealized loss must count toward the daily risk gate"
     except LiveOrderError:
         pass
     # Risk controls must not prevent a manual sell that reduces exposure.
-    service._risk_gate("BTC/USDT", "sell", Decimal("0.1"), Decimal("70"), PriceAdapter())
+    service._risk_gate("BTC/USDT", "sell", Decimal("0.1"), Decimal(70), PriceAdapter())
 
 
 def test_unvalued_commission_blocks_new_buys(tmp_path, monkeypatch):
@@ -155,7 +155,7 @@ def test_unvalued_commission_blocks_new_buys(tmp_path, monkeypatch):
             (datetime.now(UTC).isoformat(),),
         )
     try:
-        service._risk_gate("BTC/USDT", "buy", Decimal("0.001"), Decimal("100"))
+        service._risk_gate("BTC/USDT", "buy", Decimal("0.001"), Decimal(100))
         assert False, "unvalued commission must block new buys"
     except LiveOrderError:
         pass
@@ -163,7 +163,9 @@ def test_unvalued_commission_blocks_new_buys(tmp_path, monkeypatch):
 
 def test_live_order_service_refuses_testnet_adapter(tmp_path, monkeypatch):
     from types import SimpleNamespace
+
     import pytest
+
     from iskander_trade import live_orders as live_orders_module
     from iskander_trade.live_execution import ExecutionDisabled
 
