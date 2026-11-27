@@ -10,11 +10,10 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 # Declaring a real HTTP Bearer scheme makes Swagger UI expose its Authorize dialog
 # and attach the Authorization header to every protected operation.
 dashboard_bearer = HTTPBearer(auto_error=False, scheme_name="DashboardBearer")
-dashboard_bearer_dependency = Depends(dashboard_bearer)
 
 
 def require_dashboard_token(
-    credentials: HTTPAuthorizationCredentials | None = dashboard_bearer_dependency,
+    credentials: HTTPAuthorizationCredentials | None = Depends(dashboard_bearer),
 ) -> None:
     expected = os.getenv("DASHBOARD_TOKEN", "").strip()
     if not expected:
