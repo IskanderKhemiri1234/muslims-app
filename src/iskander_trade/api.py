@@ -131,12 +131,18 @@ if dashboard_dir.exists():
 @app.get("/health")
 def health() -> dict[str, str]:
     worker_enabled = os.getenv("RUN_PAPER_WORKER", "false").strip().lower() in {"1", "true", "yes"}
+    testnet_worker_enabled = os.getenv("RUN_BINANCE_TESTNET_WORKER", "false").strip().lower() in {
+        "1", "true", "yes"
+    }
     return {
         "service": settings.app_name,
+        "api_version": app.version,
         "status": "ok",
         "mode": "paper",
         "execution": "continuous_paper_worker" if worker_enabled else "manual_cycle_only",
-        "hosting": "infrlo_candidate",
+        "paper_worker": "enabled" if worker_enabled else "disabled",
+        "testnet_worker": "enabled" if testnet_worker_enabled else "disabled",
+        "hosting": os.getenv("HOSTING_PROVIDER", "self_hosted"),
     }
 
 
