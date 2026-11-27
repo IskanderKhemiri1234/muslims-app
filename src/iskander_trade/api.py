@@ -1,7 +1,6 @@
 """FastAPI dashboard API with isolated Paper, Testnet and manual Live controls."""
 from __future__ import annotations
 
-import hmac
 import logging
 import os
 import threading
@@ -12,11 +11,12 @@ from pathlib import Path
 from typing import Any
 
 import ccxt
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from .auth import require_dashboard_token
 from .config import Settings
 from .engine import PaperTradingEngine
 from .live_api import router as live_router
@@ -123,29 +123,26 @@ async def lifespan(_app: FastAPI):
             log.warning("Continuous paper worker stopped.")
 
 
-app = FastAPI(title="Iskander AI Trade API", version="0.6.0", lifespan=lifespan)
+app = FastAPI(title="Iskander AI Trade API", version="0.6.2", lifespan=lifespan)
 if dashboard_dir.exists():
     app.mount("/assets", StaticFiles(directory=dashboard_dir), name="assets")
-
-
-def require_dashboard_token(authorization: str | None = Header(default=None)) -> None:
-    expected = os.getenv("DASHBOARD_TOKEN", "")
-    if not expected:
-        raise HTTPException(status_code=503, detail="Dashboard access token is not configured.")
-    supplied = authorization.removeprefix("Bearer ").strip() if authorization else ""
-    if not hmac.compare_digest(supplied, expected):
-        raise HTTPException(status_code=401, detail="Invalid dashboard token.")
 
 
 @app.get("/health")
 def health() -> dict[str, str]:
     worker_enabled = os.getenv("RUN_PAPER_WORKER", "false").strip().lower() in {"1", "true", "yes"}
+    testnet_worker_enabled = os.getenv("RUN_BINANCE_TESTNET_WORKER", "false").strip().lower() in {
+        "1", "true", "yes"
+    }
     return {
         "service": settings.app_name,
+        "api_version": app.version,
         "status": "ok",
         "mode": "paper",
         "execution": "continuous_paper_worker" if worker_enabled else "manual_cycle_only",
-        "hosting": "infrlo_candidate",
+        "paper_worker": "enabled" if worker_enabled else "disabled",
+        "testnet_worker": "enabled" if testnet_worker_enabled else "disabled",
+        "hosting": os.getenv("HOSTING_PROVIDER", "self_hosted"),
     }
 
 

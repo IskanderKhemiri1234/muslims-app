@@ -1,14 +1,13 @@
 """Authenticated Binance Spot Live manual-order API."""
 from __future__ import annotations
 
-import hmac
 import logging
-import os
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from .auth import require_dashboard_token
 from .live_control import LiveControlError, LiveControlService
 from .live_execution import ExecutionDisabled, OrderValidationError
 from .live_orders import LiveManualOrderService, LiveOrderError
@@ -28,21 +27,12 @@ class ManualOrderRequest(BaseModel):
     price: str | None = Field(default=None, max_length=40)
 
 
-def _require_dashboard_token(authorization: str | None = Header(default=None)) -> None:
-    expected = os.getenv("DASHBOARD_TOKEN", "")
-    supplied = authorization.removeprefix("Bearer ").strip() if authorization else ""
-    if not expected:
-        raise HTTPException(status_code=503, detail="Dashboard access token is not configured.")
-    if not hmac.compare_digest(supplied, expected):
-        raise HTTPException(status_code=401, detail="Invalid dashboard token.")
-
-
-@router.get("/status", dependencies=[Depends(_require_dashboard_token)])
+@router.get("/status", dependencies=[Depends(require_dashboard_token)])
 def live_status() -> dict[str, Any]:
     return service.status()
 
 
-@router.get("/preflight", dependencies=[Depends(_require_dashboard_token)])
+@router.get("/preflight", dependencies=[Depends(require_dashboard_token)])
 def live_preflight() -> dict[str, Any]:
     try:
         return service.preflight()
@@ -50,12 +40,12 @@ def live_preflight() -> dict[str, Any]:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
-@router.get("/orders", dependencies=[Depends(_require_dashboard_token)])
+@router.get("/orders", dependencies=[Depends(require_dashboard_token)])
 def live_orders_status() -> dict[str, Any]:
     return orders.status()
 
 
-@router.post("/arm", dependencies=[Depends(_require_dashboard_token)])
+@router.post("/arm", dependencies=[Depends(require_dashboard_token)])
 def arm_manual_live() -> dict[str, Any]:
     try:
         return orders.arm()
@@ -63,23 +53,23 @@ def arm_manual_live() -> dict[str, Any]:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
-@router.post("/disarm", dependencies=[Depends(_require_dashboard_token)])
+@router.post("/disarm", dependencies=[Depends(require_dashboard_token)])
 def disarm_manual_live() -> dict[str, Any]:
     return orders.disarm()
 
 
-@router.post("/emergency-stop", dependencies=[Depends(_require_dashboard_token)])
+@router.post("/emergency-stop", dependencies=[Depends(require_dashboard_token)])
 def live_emergency_stop() -> dict[str, Any]:
     return orders.emergency_stop()
 
 
-@router.post("/emergency-stop/release", dependencies=[Depends(_require_dashboard_token)])
+@router.post("/emergency-stop/release", dependencies=[Depends(require_dashboard_token)])
 def release_live_emergency_stop() -> dict[str, Any]:
     service.set_stopped(False)
     return orders.status()
 
 
-@router.post("/orders", dependencies=[Depends(_require_dashboard_token)])
+@router.post("/orders", dependencies=[Depends(require_dashboard_token)])
 def submit_manual_live_order(payload: ManualOrderRequest) -> dict[str, Any]:
     try:
         return orders.submit(
@@ -97,7 +87,7 @@ def submit_manual_live_order(payload: ManualOrderRequest) -> dict[str, Any]:
         raise HTTPException(status_code=502, detail="Order outcome may be uncertain; reconcile before retrying.") from exc
 
 
-@router.post("/reconcile", dependencies=[Depends(_require_dashboard_token)])
+@router.post("/reconcile", dependencies=[Depends(require_dashboard_token)])
 def reconcile_live_orders() -> dict[str, Any]:
     try:
         return orders.reconcile()
@@ -105,7 +95,7 @@ def reconcile_live_orders() -> dict[str, Any]:
         log.exception("Live order reconciliation failed.")
         raise HTTPException(status_code=502, detail="Live reconciliation failed; unresolved orders remain blocked.") from exc
 
-@router.post("/orders/{client_order_id}/cancel", dependencies=[Depends(_require_dashboard_token)])
+@router.post("/orders/{client_order_id}/cancel", dependencies=[Depends(require_dashboard_token)])
 def cancel_manual_live_order(client_order_id: str) -> dict[str, Any]:
     try:
         return orders.cancel(client_order_id)

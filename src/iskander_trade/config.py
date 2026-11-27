@@ -1,4 +1,4 @@
-"""Validated application configuration. Live trading is intentionally unavailable."""
+"""Validated Paper strategy-engine configuration; manual exchange controls are isolated."""
 
 from __future__ import annotations
 
@@ -8,7 +8,17 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+# Resolve .env from the application root explicitly; do not depend on the
+# process working directory used by a hosting provider's launch command.
+for _env_path in (
+    PROJECT_ROOT / ".env",
+    Path.cwd() / ".env",
+    PROJECT_ROOT.parent / ".env",
+):
+    if _env_path.is_file():
+        load_dotenv(dotenv_path=_env_path, override=False)
+        break
 
 
 def _float(name: str, default: float) -> float:
@@ -48,10 +58,15 @@ class Settings:
     log_level: str = os.getenv("LOG_LEVEL", "INFO").upper()
 
     def validate(self) -> None:
+        # MODE selects the automated strategy engine only. Keep it on Paper:
+        # Binance Testnet and manual Live have separate, fail-closed API gates.
+        # A manual Live flag must never switch the strategy worker into Live mode.
         if self.mode != "paper":
             raise ValueError(
-                "This build supports paper mode only. Live/testnet order execution "
-                "has not been implemented or safety-reviewed."
+                "This build supports paper mode only for the automated strategy engine; "
+                "MODE must remain 'paper'. Testnet and manual Live are separate execution "
+                "paths with independent "
+                "credentials, explicit server flags, operator arming and emergency stop."
             )
         if not self.watchlist:
             raise ValueError("WATCHLIST must contain at least one market.")

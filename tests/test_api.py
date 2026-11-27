@@ -12,6 +12,9 @@ def test_health_is_public_and_paper_only():
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["mode"] == "paper"
+    assert response.json()["api_version"] == "0.6.2"
+    assert response.json()["paper_worker"] in {"enabled", "disabled"}
+    assert response.json()["testnet_worker"] in {"enabled", "disabled"}
 
 
 def test_dashboard_api_fails_closed_without_token(monkeypatch):
@@ -87,3 +90,37 @@ def test_market_endpoint_reports_bad_symbol_without_hiding_other_prices(monkeypa
         "error": "Price temporarily unavailable",
     }
     assert fake.closed
+
+
+
+def test_swagger_openapi_declares_bearer_security_for_protected_routes():
+    schema = client.get("/openapi.json").json()
+    schemes = schema["components"]["securitySchemes"]
+    assert schemes["DashboardBearer"]["type"] == "http"
+    assert schemes["DashboardBearer"]["scheme"] == "bearer"
+    assert schema["paths"]["/api/v1/status"]["get"]["security"] == [
+        {"DashboardBearer": []}
+    ]
+    assert "security" not in schema["paths"]["/health"]["get"]
+    assert schema["info"]["version"] == "0.6.2"
+    assert "/api/v1/testnet/preflight" in schema["paths"]
+    assert "/api/v1/live/orders" in schema["paths"]
+    assert schema["paths"]["/api/v1/live/orders"]["post"]["security"] == [
+        {"DashboardBearer": []}
+    ]
+
+
+def test_protected_route_accepts_bearer_token_and_rejects_invalid_token(monkeypatch):
+    monkeypatch.setenv("DASHBOARD_TOKEN", "rotated-test-token")
+    monkeypatch.setattr(api_module, "status_payload", lambda: {"mode": "paper"})
+
+    accepted = client.get(
+        "/api/v1/status",
+        headers={"Authorization": "Bearer rotated-test-token"},
+    )
+    rejected = client.get(
+        "/api/v1/status",
+        headers={"Authorization": "Bearer wrong-token"},
+    )
+    assert accepted.status_code == 200
+    assert rejected.status_code == 401
