@@ -123,7 +123,7 @@ async def lifespan(_app: FastAPI):
             log.warning("Continuous paper worker stopped.")
 
 
-app = FastAPI(title="Iskander AI Trade API", version="0.6.0", lifespan=lifespan)
+app = FastAPI(title="Iskander AI Trade API", version="0.6.1", lifespan=lifespan)
 if dashboard_dir.exists():
     app.mount("/assets", StaticFiles(directory=dashboard_dir), name="assets")
 
