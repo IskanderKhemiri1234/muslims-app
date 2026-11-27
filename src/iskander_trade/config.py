@@ -8,7 +8,17 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+# Resolve .env from the application root explicitly; do not depend on the
+# process working directory used by a hosting provider's launch command.
+for _env_path in (
+    PROJECT_ROOT / ".env",
+    Path.cwd() / ".env",
+    PROJECT_ROOT.parent / ".env",
+):
+    if _env_path.is_file():
+        load_dotenv(dotenv_path=_env_path, override=False)
+        break
 
 
 def _float(name: str, default: float) -> float:
