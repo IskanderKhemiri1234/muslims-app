@@ -102,7 +102,7 @@ def test_swagger_openapi_declares_bearer_security_for_protected_routes():
         {"DashboardBearer": []}
     ]
     assert "security" not in schema["paths"]["/health"]["get"]
-    assert schema["info"]["version"] == "0.6.1"
+    assert schema["info"]["version"] == "0.6.2"
     assert "/api/v1/testnet/preflight" in schema["paths"]
     assert "/api/v1/live/orders" in schema["paths"]
     assert schema["paths"]["/api/v1/live/orders"]["post"]["security"] == [
