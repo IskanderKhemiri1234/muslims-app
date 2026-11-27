@@ -99,6 +99,12 @@ def test_swagger_openapi_declares_bearer_security_for_protected_routes():
         {"DashboardBearer": []}
     ]
     assert "security" not in schema["paths"]["/health"]["get"]
+    assert schema["info"]["version"] == "0.6.1"
+    assert "/api/v1/testnet/preflight" in schema["paths"]
+    assert "/api/v1/live/orders" in schema["paths"]
+    assert schema["paths"]["/api/v1/live/orders"]["post"]["security"] == [
+        {"DashboardBearer": []}
+    ]
 
 
 def test_protected_route_accepts_bearer_token_and_rejects_invalid_token(monkeypatch):
