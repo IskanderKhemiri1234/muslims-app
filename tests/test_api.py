@@ -12,6 +12,9 @@ def test_health_is_public_and_paper_only():
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["mode"] == "paper"
+    assert response.json()["api_version"] == "0.6.1"
+    assert response.json()["paper_worker"] in {"enabled", "disabled"}
+    assert response.json()["testnet_worker"] in {"enabled", "disabled"}
 
 
 def test_dashboard_api_fails_closed_without_token(monkeypatch):
